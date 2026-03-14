@@ -1,0 +1,39 @@
+CREATE TABLE Player (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    turnOrder INTEGER NOT NULL
+);
+
+CREATE TABLE GameState (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    currentRound INTEGER NOT NULL,
+    currentPhase INTEGER NOT NULL,
+    currentPlayerId INTEGER NOT NULL,
+    FOREIGN KEY(currentPlayerId) REFERENCES Player(id)
+);
+
+insertPlayer:
+INSERT INTO Player(name, color, turnOrder)
+VALUES (?, ?, ?);
+
+selectAllPlayers:
+SELECT * FROM Player ORDER BY turnOrder ASC;
+
+deleteAllPlayers:
+DELETE FROM Player;
+
+initializeGame:
+INSERT OR REPLACE INTO GameState(id, currentRound, currentPhase, currentPlayerId)
+VALUES (1, 1, 1, ?);
+
+getGameState:
+SELECT * FROM GameState WHERE id = 1;
+
+updateGameState:
+UPDATE GameState
+SET currentRound = ?, currentPhase = ?, currentPlayerId = ?
+WHERE id = 1;
+
+deleteGameState:
+DELETE FROM GameState;
