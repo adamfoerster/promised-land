@@ -28,13 +28,27 @@ val playerColors = listOf(
 )
 
 @Composable
-fun SetupScreen(onStartGame: (List<Pair<String, String>>) -> Unit) {
+fun SetupScreen(onStartGame: (String, List<Pair<String, String>>) -> Unit) {
+    var gameName by remember { mutableStateOf("Game 1") }
     var players by remember { mutableStateOf(List(3) { index -> "Player ${index + 1}" to playerColors[index].first }) }
     var errorMessage by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)).padding(16.dp)) {
         Text("Setup Strategy Game", style = MaterialTheme.typography.h4, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
-        
+
+        OutlinedTextField(
+            value = gameName,
+            onValueChange = { gameName = it; errorMessage = "" },
+            label = { Text("Game Name", color = Color.LightGray) },
+            singleLine = true,
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor = Color.White,
+                focusedBorderColor = Color(0xFFE91E63),
+                unfocusedBorderColor = Color.Gray
+            ),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+        )
+
         if (errorMessage.isNotEmpty()) {
             Text(errorMessage, color = MaterialTheme.colors.error, modifier = Modifier.padding(bottom = 8.dp))
         }
@@ -137,9 +151,14 @@ fun SetupScreen(onStartGame: (List<Pair<String, String>>) -> Unit) {
 
             Button(
                 onClick = {
+                    val trimmedName = gameName.trim()
                     val names = players.map { it.first.trim() }
                     val colors = players.map { it.second }
-                    
+
+                    if (trimmedName.isEmpty()) {
+                        errorMessage = "Game name cannot be empty"
+                        return@Button
+                    }
                     if (names.any { it.isEmpty() }) {
                         errorMessage = "Names cannot be empty"
                         return@Button
@@ -152,8 +171,8 @@ fun SetupScreen(onStartGame: (List<Pair<String, String>>) -> Unit) {
                         errorMessage = "Colors cannot be repeated"
                         return@Button
                     }
-                    
-                    onStartGame(players)
+
+                    onStartGame(trimmedName, players)
                 },
                 colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFF4CAF50), contentColor = Color.White)
             ) {

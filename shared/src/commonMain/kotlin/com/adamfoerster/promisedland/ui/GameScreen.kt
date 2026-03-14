@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -15,7 +17,11 @@ import androidx.compose.ui.unit.dp
 import com.adamfoerster.promisedland.game.GameUIState
 
 @Composable
-fun GameScreen(state: GameUIState, onNextTurn: () -> Unit) {
+fun GameScreen(
+    state: GameUIState,
+    onNextTurn: () -> Unit,
+    onReturnToWelcome: () -> Unit
+) {
     if (state.currentPlayer == null) {
         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Color.White)
@@ -34,11 +40,50 @@ fun GameScreen(state: GameUIState, onNextTurn: () -> Unit) {
     )
     val phaseName = phaseNames.getOrNull((state.currentPhase - 1).toInt()) ?: "Unknown"
 
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Promised Land", style = MaterialTheme.typography.h4, color = Color.White, modifier = Modifier.padding(bottom = 32.dp))
+
+        // Title row with menu
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    state.gameName.ifBlank { "Promised Land" },
+                    style = MaterialTheme.typography.h5,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                if (state.gameName.isNotBlank()) {
+                    Text("Promised Land", style = MaterialTheme.typography.caption, color = Color(0xFF9E9E9E))
+                }
+            }
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = Color.White)
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(onClick = {
+                        menuExpanded = false
+                        onReturnToWelcome()
+                    }) {
+                        Text("Return to Welcome Screen")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             elevation = 8.dp,
             backgroundColor = Color(0xFF2C2C2C),
             shape = RoundedCornerShape(16.dp)
@@ -54,7 +99,7 @@ fun GameScreen(state: GameUIState, onNextTurn: () -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
 
         val colorInfo = playerColors.find { it.first == state.currentPlayer.color }
-        
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = 4.dp,

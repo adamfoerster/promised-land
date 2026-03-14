@@ -1,39 +1,73 @@
-CREATE TABLE Player (
+CREATE TABLE Game (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    startedAt INTEGER NOT NULL
+);
+
+CREATE TABLE Player (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    gameId INTEGER NOT NULL,
+    name TEXT NOT NULL,
     color TEXT NOT NULL,
-    turnOrder INTEGER NOT NULL
+    turnOrder INTEGER NOT NULL,
+    FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE
 );
 
 CREATE TABLE GameState (
-    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    gameId INTEGER NOT NULL UNIQUE,
     currentRound INTEGER NOT NULL,
     currentPhase INTEGER NOT NULL,
     currentPlayerId INTEGER NOT NULL,
+    FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE,
     FOREIGN KEY(currentPlayerId) REFERENCES Player(id)
 );
 
+-- Game queries
+insertGame:
+INSERT INTO Game(name, startedAt)
+VALUES (?, ?);
+
+lastInsertRowId:
+SELECT last_insert_rowid();
+
+selectAllGames:
+SELECT
+    g.id,
+    g.name,
+    g.startedAt,
+    COUNT(p.id) AS playerCount
+FROM Game g
+LEFT JOIN Player p ON p.gameId = g.id
+GROUP BY g.id
+ORDER BY g.startedAt DESC;
+
+deleteGame:
+DELETE FROM Game WHERE id = ?;
+
+-- Player queries
 insertPlayer:
-INSERT INTO Player(name, color, turnOrder)
-VALUES (?, ?, ?);
+INSERT INTO Player(gameId, name, color, turnOrder)
+VALUES (?, ?, ?, ?);
 
-selectAllPlayers:
-SELECT * FROM Player ORDER BY turnOrder ASC;
+selectPlayersForGame:
+SELECT * FROM Player WHERE gameId = ? ORDER BY turnOrder ASC;
 
-deleteAllPlayers:
-DELETE FROM Player;
+deletePlayersForGame:
+DELETE FROM Player WHERE gameId = ?;
 
+-- GameState queries
 initializeGame:
-INSERT OR REPLACE INTO GameState(id, currentRound, currentPhase, currentPlayerId)
-VALUES (1, 1, 1, ?);
+INSERT OR REPLACE INTO GameState(gameId, currentRound, currentPhase, currentPlayerId)
+VALUES (?, 1, 1, ?);
 
 getGameState:
-SELECT * FROM GameState WHERE id = 1;
+SELECT * FROM GameState WHERE gameId = ?;
 
 updateGameState:
 UPDATE GameState
 SET currentRound = ?, currentPhase = ?, currentPlayerId = ?
-WHERE id = 1;
+WHERE gameId = ?;
 
-deleteGameState:
-DELETE FROM GameState;
+deleteGameStateForGame:
+DELETE FROM GameState WHERE gameId = ?;
