@@ -23,108 +23,112 @@ fun GameScreen(
     onReturnToWelcome: () -> Unit
 ) {
     if (state.currentPlayer == null) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = Color.White)
         }
         return
     }
 
-    val phaseNames = listOf(
-        "Announcements",
-        "Draw cards",
-        "Income",
-        "Building and mustering",
-        "Movements",
-        "Combat",
-        "Check victory"
-    )
-    val phaseName = phaseNames.getOrNull((state.currentPhase - 1).toInt()) ?: "Unknown"
-
+    var selectedHex by remember { mutableStateOf<HexagonData?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E)).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E1E))) {
+        // The Map occupies the center
+        HexMap(
+            modifier = Modifier.fillMaxSize(),
+            onHexSelected = { selectedHex = it },
+            selectedHex = selectedHex
+        )
 
-        // Title row with menu
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    state.gameName.ifBlank { "Promised Land" },
-                    style = MaterialTheme.typography.h5,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                if (state.gameName.isNotBlank()) {
-                    Text("Promised Land", style = MaterialTheme.typography.caption, color = Color(0xFF9E9E9E))
-                }
-            }
-
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = Color.White)
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+        // Overlay UI
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // Top Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Current Player Info
+                val colorInfo = playerColors.find { it.first == state.currentPlayer.color }
+                Card(
+                    backgroundColor = Color.Black.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    DropdownMenuItem(onClick = {
-                        menuExpanded = false
-                        onReturnToWelcome()
-                    }) {
-                        Text("Return to Welcome Screen")
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(12.dp).clip(CircleShape)
+                                    .background(colorInfo?.second ?: Color.Gray)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                state.currentPlayer.name,
+                                style = MaterialTheme.typography.body2,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                state.gameName.ifBlank { "Promised Land" },
+                                style = MaterialTheme.typography.subtitle1,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            "Round ${state.currentRound} - Phase ${state.currentPhase}",
+                            style = MaterialTheme.typography.caption,
+                            color = Color.LightGray
+                        )
+                    }
+                }
+
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Menu",
+                            tint = Color.White
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(onClick = {
+                            menuExpanded = false
+                            onReturnToWelcome()
+                        }) {
+                            Text("Return to Welcome Screen")
+                        }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Spacer(modifier = Modifier.height(80.dp)) // Space for the bottom bar in HexMap
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            elevation = 8.dp,
-            backgroundColor = Color(0xFF2C2C2C),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Round ${state.currentRound}", style = MaterialTheme.typography.h5, color = Color.LightGray)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Phase ${state.currentPhase}", style = MaterialTheme.typography.subtitle1, color = Color.Gray)
-                Text(phaseName, style = MaterialTheme.typography.h4, fontWeight = FontWeight.Bold, color = Color.White)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        val colorInfo = playerColors.find { it.first == state.currentPlayer.color }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 4.dp,
-            backgroundColor = Color(0xFF333333),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(modifier = Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(colorInfo?.second ?: Color.Gray))
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text("Current Player", style = MaterialTheme.typography.subtitle2, color = Color.Gray)
-                    Text(state.currentPlayer.name, style = MaterialTheme.typography.h5, color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
+        // Next Turn Button (floating)
         Button(
             onClick = onNextTurn,
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            shape = RoundedCornerShape(30.dp),
-            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFE91E63), contentColor = Color.White)
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 100.dp, end = 16.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(0xFFE91E63),
+                contentColor = Color.White
+            )
         ) {
-            Text("Complete Turn & Next Player", style = MaterialTheme.typography.button, fontWeight = FontWeight.Bold)
+            Text("Next Turn", style = MaterialTheme.typography.button)
         }
     }
 }
