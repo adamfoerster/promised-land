@@ -39,7 +39,8 @@ fun WelcomeScreen(
             Text(
                 text = "⚔",
                 fontSize = 72.sp,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 16.dp),
+                color = Color.White
             )
 
             Text(

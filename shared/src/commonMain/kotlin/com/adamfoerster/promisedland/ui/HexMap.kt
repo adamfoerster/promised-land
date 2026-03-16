@@ -47,7 +47,7 @@ fun HexMap(
     selectedHex: HexagonData?
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val columns = 8
+    val columns = 10
     val rows = 25
     val hexSize = 60f 
 
@@ -165,7 +165,7 @@ fun HexMap(
 
         FloatingActionButton(
             onClick = { cycleZoom() },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(16.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 96.dp, start = 16.dp),
             backgroundColor = Color.Black.copy(alpha = 0.6f),
             contentColor = Color.White
         ) {
