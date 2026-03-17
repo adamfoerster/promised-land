@@ -10,28 +10,31 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.adamfoerster.promisedland.game.HexagonData
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.*
-
-data class HexagonData(val col: Int, val row: Int) {
-    val id: String = "${('A'.code + col).toChar()}${row + 1}"
-}
 
 enum class ZoomPreset(val scale: Float) {
     OUT(0.5f), 
@@ -44,7 +47,8 @@ enum class ZoomPreset(val scale: Float) {
 fun HexMap(
     modifier: Modifier = Modifier,
     onHexSelected: (HexagonData) -> Unit,
-    selectedHex: HexagonData?
+    selectedHex: HexagonData?,
+    hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap()
 ) {
     val coroutineScope = rememberCoroutineScope()
     val columns = 10
@@ -58,6 +62,10 @@ fun HexMap(
 
     val mapWidth = sqrt(3f) * hexSize * (columns + 0.5f)
     val mapHeight = hexSize * (1.5f * rows + 0.5f)
+
+    val xIcon = rememberVectorPainter(Icons.Default.Clear)
+    val villageIcon = rememberVectorPainter(Icons.Default.Home)
+    val cityIcon = rememberVectorPainter(Icons.Default.Place)
 
     LaunchedEffect(containerSize) {
         if (containerSize.width > 0 && containerSize.height > 0) {
@@ -118,11 +126,14 @@ fun HexMap(
                 detectTapGestures { tapOffset ->
                     val normalizedX = (tapOffset.x - offset.value.x) / scale.value
                     val normalizedY = (tapOffset.y - offset.value.y) / scale.value
-                    val hex = findHexAt(normalizedX, normalizedY, hexSize)
-                    if (hex != null && hex.col in 0 until columns && hex.row in 0 until rows) {
-                        onHexSelected(hex)
-                        animateToHex(hex, ZoomPreset.IN.scale)
-                        currentZoomPreset = ZoomPreset.IN
+                    val clickedHex = findHexAt(normalizedX, normalizedY, hexSize)
+                    if (clickedHex != null && clickedHex.col in 0 until columns && clickedHex.row in 0 until rows) {
+                        val hexData = hexagons[clickedHex.col to clickedHex.row] ?: clickedHex
+                        if (hexData.isActive) {
+                            onHexSelected(hexData)
+                            animateToHex(hexData, ZoomPreset.IN.scale)
+                            currentZoomPreset = ZoomPreset.IN
+                        }
                     }
                 }
             }
@@ -145,18 +156,50 @@ fun HexMap(
             scaleY = scale.value
             transformOrigin = TransformOrigin(0f, 0f)
         }) {
-            // Map Background - Uses a placeholder if map_background.png is missing
             MapBackground(mapWidth, mapHeight)
 
-            // Hex Grid Overlay
             Canvas(modifier = Modifier.size(mapWidth.dp, mapHeight.dp)) {
                 for (r in 0 until rows) {
                     for (c in 0 until columns) {
+                        val hexData = hexagons[c to r] ?: HexagonData(c, r)
                         val hexPath = createHexPath(c, r, hexSize)
-                        drawPath(path = hexPath, color = Color.White.copy(alpha = 0.3f), style = Stroke(width = 1f))
+                        
+                        // Draw hex border
+                        drawPath(
+                            path = hexPath, 
+                            color = if (hexData.isActive) Color.White.copy(alpha = 0.3f) else Color.Red.copy(alpha = 0.5f), 
+                            style = Stroke(width = 1f)
+                        )
+                        
+                        // Highlight selected
                         if (selectedHex?.col == c && selectedHex?.row == r) {
                             drawPath(path = hexPath, color = Color.Green, style = Stroke(width = 4f))
                             drawPath(path = hexPath, color = Color.Green.copy(alpha = 0.2f), style = Fill)
+                        }
+
+                        // Draw Icons
+                        val centerX = sqrt(3f) * hexSize * (c + 0.5f * (r % 2)) + (sqrt(3f) * hexSize / 2f)
+                        val centerY = 1.5f * hexSize * r + hexSize
+                        val iconSize = 30f
+
+                        if (!hexData.isActive) {
+                            translate(centerX - iconSize / 2, centerY - iconSize / 2) {
+                                with(xIcon) {
+                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.Red))
+                                }
+                            }
+                        } else if (hexData.type == "village") {
+                            translate(centerX - iconSize / 2, centerY - iconSize / 2) {
+                                with(villageIcon) {
+                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.White))
+                                }
+                            }
+                        } else if (hexData.type == "city") {
+                            translate(centerX - iconSize / 2, centerY - iconSize / 2) {
+                                with(cityIcon) {
+                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.Yellow))
+                                }
+                            }
                         }
                     }
                 }
@@ -179,8 +222,13 @@ fun HexMap(
                 color = Color.Black.copy(alpha = 0.8f),
                 elevation = 8.dp
             ) {
+                val typeText = when(selectedHex.type) {
+                    "village" -> " (Village)"
+                    "city" -> " (City)"
+                    else -> ""
+                }
                 Text(
-                    text = "Selected Region: ${selectedHex.id}",
+                    text = "Selected: ${selectedHex.id}$typeText",
                     modifier = Modifier.padding(16.dp),
                     color = Color.White,
                     style = MaterialTheme.typography.h6,
@@ -194,17 +242,7 @@ fun HexMap(
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun MapBackground(width: Float, height: Float) {
-    // Note: To fix the MissingResourceException, add 'map_background.png' to your resources.
-    // We wrap this in a way that allows the rest of the UI to function if the file is missing.
     Box(modifier = Modifier.size(width.dp, height.dp).background(Color(0xFF242424))) {
-//        Text(
-//            "Place 'map_background.png' in resources folder",
-//            modifier = Modifier.align(Alignment.Center).padding(20.dp),
-//            color = Color.DarkGray,
-//            textAlign = TextAlign.Center
-//        )
-        
-        // Uncomment the Image block below once you have added the file to your resources
         Image(
             painter = painterResource("map_background.png"),
             contentDescription = null,

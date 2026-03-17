@@ -1,3 +1,5 @@
+import kotlin.Boolean;
+
 CREATE TABLE Game (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -21,6 +23,20 @@ CREATE TABLE GameState (
     currentPlayerId INTEGER NOT NULL,
     FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE,
     FOREIGN KEY(currentPlayerId) REFERENCES Player(id)
+);
+
+CREATE TABLE Hexagon (
+    col INTEGER NOT NULL,
+    row INTEGER NOT NULL,
+    name TEXT,
+    isActive INTEGER AS Boolean NOT NULL DEFAULT 1,
+    type TEXT, -- 'city', 'village', or NULL
+    PRIMARY KEY(col, row)
+);
+
+CREATE TABLE Metadata (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 -- Game queries
@@ -71,3 +87,25 @@ WHERE gameId = ?;
 
 deleteGameStateForGame:
 DELETE FROM GameState WHERE gameId = ?;
+
+-- Hexagon queries
+insertHexagon:
+INSERT OR REPLACE INTO Hexagon(col, row, name, isActive, type)
+VALUES (?, ?, ?, ?, ?);
+
+selectAllHexagons:
+SELECT * FROM Hexagon;
+
+selectHexagon:
+SELECT * FROM Hexagon WHERE col = ? AND row = ?;
+
+deleteAllHexagons:
+DELETE FROM Hexagon;
+
+-- Metadata queries
+getMetadata:
+SELECT value FROM Metadata WHERE key = ?;
+
+setMetadata:
+INSERT OR REPLACE INTO Metadata(key, value)
+VALUES (?, ?);

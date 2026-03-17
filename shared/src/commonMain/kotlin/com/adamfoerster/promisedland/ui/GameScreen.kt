@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.adamfoerster.promisedland.game.GameUIState
+import com.adamfoerster.promisedland.game.HexagonData
 
 @Composable
 fun GameScreen(
@@ -40,7 +41,8 @@ fun GameScreen(
         HexMap(
             modifier = Modifier.fillMaxSize(),
             onHexSelected = { selectedHex = it },
-            selectedHex = selectedHex
+            selectedHex = selectedHex,
+            hexagons = state.hexagons
         )
 
         // Overlay UI

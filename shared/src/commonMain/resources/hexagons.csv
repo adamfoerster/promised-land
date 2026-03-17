@@ -1,0 +1,14 @@
+column,row,name,active,type
+e,13,Jerusalem,true,city
+e,12,Dssaqw,true,city
+e,17,Hebron,true,village
+c,3,Tyre,true,city
+a,1,,false,none
+b,1,,false,none
+c,1,,false,none
+d,1,,false,none
+e,1,,false,none
+f,2,,false,none
+a,3,,false,none
+b,2,,false,none
+3,2,,false,none

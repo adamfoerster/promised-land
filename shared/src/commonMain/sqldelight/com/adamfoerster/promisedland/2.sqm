@@ -1,0 +1,13 @@
+-- Migration from version 2 to 3
+
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (4, 14, 'Jerusalem', 0, 'city');
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (4, 3, 'Tyre', 0, 'city');
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (0, 0, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (1, 0, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (2, 0, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (3, 0, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (4, 0, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (0, 1, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (1, 1, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (2, 1, NULL, 0, NULL);
+INSERT INTO Hexagon(col, row, name, isActive, type) VALUES (3, 1, NULL, 0, NULL);

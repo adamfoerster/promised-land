@@ -1,0 +1,16 @@
+-- Migration from version 1 to 2
+-- This adds the Hexagon and Metadata tables which were added after the initial schema.
+
+CREATE TABLE IF NOT EXISTS Hexagon (
+    col INTEGER NOT NULL,
+    row INTEGER NOT NULL,
+    name TEXT,
+    isActive INTEGER AS kotlin.Boolean NOT NULL DEFAULT 1,
+    type TEXT,
+    PRIMARY KEY(col, row)
+);
+
+CREATE TABLE IF NOT EXISTS Metadata (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
