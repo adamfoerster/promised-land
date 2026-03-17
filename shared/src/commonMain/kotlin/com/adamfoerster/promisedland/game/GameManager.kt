@@ -17,76 +17,166 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.resource
 
 data class SavedGameSummary(
-    val id: Long,
-    val name: String,
-    val startedAt: Long,
-    val playerCount: Long
+        val id: Long,
+        val name: String,
+        val startedAt: Long,
+        val playerCount: Long
 )
 
 data class GameUIState(
-    val gameId: Long? = null,
-    val gameName: String = "",
-    val currentRound: Long = 1,
-    val currentPhase: Long = 1,
-    val currentPlayer: Player? = null,
-    val players: List<Player> = emptyList(),
-    val isGameActive: Boolean = false
+        val gameId: Long? = null,
+        val gameName: String = "",
+        val currentRound: Long = 1,
+        val currentPhase: Long = 1,
+        val currentPlayer: Player? = null,
+        val players: List<Player> = emptyList(),
+        val isGameActive: Boolean = false,
+        val hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap()
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
-class GameManager(
-    databaseDriverFactory: DatabaseDriverFactory,
-    scope: CoroutineScope
-) {
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalResourceApi::class)
+class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scope: CoroutineScope) {
     private val database = GameDatabase(databaseDriverFactory.createDriver())
     private val queries = database.gameDatabaseQueries
 
     // The currently active game id (null = no active game / on welcome screen)
     private val activeGameId = MutableStateFlow<Long?>(null)
 
-    val state: StateFlow<GameUIState> = activeGameId.flatMapLatest { gameId ->
-        if (gameId == null) {
-            flowOf(GameUIState())
-        } else {
-            combine(
-                queries.selectPlayersForGame(gameId).asFlow().mapToList(Dispatchers.Default),
-                queries.getGameState(gameId).asFlow().mapToOneOrNull(Dispatchers.Default)
-            ) { players: List<Player>, gameState ->
-                if (gameState == null || players.isEmpty()) {
-                    GameUIState(gameId = gameId)
-                } else {
-                    val currentPlayer = players.find { it.id == gameState.currentPlayerId }
-                    val gameName = queries.selectAllGames().executeAsList()
-                        .find { row -> row.id == gameId }?.name ?: ""
-                    GameUIState(
-                        gameId = gameId,
-                        gameName = gameName,
-                        currentRound = gameState.currentRound,
-                        currentPhase = gameState.currentPhase,
-                        currentPlayer = currentPlayer,
-                        players = players.sortedBy { it.turnOrder },
-                        isGameActive = true
-                    )
+    // Increment this whenever you update hexagons.csv
+    private val MAP_DATA_VERSION = 9L
+
+    init {
+        scope.launch(Dispatchers.Default) { syncMapData() }
+    }
+
+    private suspend fun syncMapData() {
+        try {
+            val currentVersion =
+                    queries.getMetadata("map_version").executeAsOneOrNull()?.toLongOrNull() ?: 0L
+            if (MAP_DATA_VERSION > currentVersion) {
+                val csvContent = resource("hexagons.csv").readBytes().decodeToString()
+                val lines = csvContent.lines().drop(1).filter { it.isNotBlank() }
+
+                queries.transaction {
+                    queries.deleteAllHexagons()
+                    lines.forEach { line ->
+                        println()
+                        val parts = line.split(",")
+                        if (parts.size >= 5) {
+                            val col = parts[0].trim().lowercase() ?: return@forEach
+                            val row = parts[1].trim().toLongOrNull() ?: return@forEach
+                            val name = parts[2].trim().takeIf { it.isNotEmpty() }
+                            val active = parts[3].trim().lowercase() == "true"
+                            val type =
+                                    parts[4].trim().lowercase().takeIf {
+                                        it != "none" && it.isNotEmpty()
+                                    }
+
+                            queries.insertHexagon(colCharToLong(col), row - 1, name, active, type)
+                        }
+                    }
+                    queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
                 }
             }
+        } catch (e: Exception) {
+            println("Error syncing map data: ${e.message}")
         }
-    }.stateIn(scope, SharingStarted.WhileSubscribed(), GameUIState())
+    }
+
+    val hexagons: StateFlow<Map<Pair<Int, Int>, HexagonData>> =
+            queries.selectAllHexagons()
+                    .asFlow()
+                    .mapToList(Dispatchers.Default)
+                    .map { rows ->
+                        rows.associate { row ->
+                            (row.col.toInt() to row.row.toInt()) to
+                                    HexagonData(
+                                            col = row.col.toInt(),
+                                            row = row.row.toInt(),
+                                            name = row.name ?: "",
+                                            isActive = row.isActive,
+                                            type = row.type
+                                    )
+                        }
+                    }
+                    .stateIn(scope, SharingStarted.WhileSubscribed(), emptyMap())
+
+    val state: StateFlow<GameUIState> =
+            combine(activeGameId, hexagons) { gameId, hexMap -> gameId to hexMap }
+                    .flatMapLatest { (gameId, hexMap) ->
+                        if (gameId == null) {
+                            flowOf(GameUIState(hexagons = hexMap))
+                        } else {
+                            combine(
+                                    queries.selectPlayersForGame(gameId)
+                                            .asFlow()
+                                            .mapToList(Dispatchers.Default),
+                                    queries.getGameState(gameId)
+                                            .asFlow()
+                                            .mapToOneOrNull(Dispatchers.Default)
+                            ) { players: List<Player>, gameState ->
+                                if (gameState == null || players.isEmpty()) {
+                                    GameUIState(gameId = gameId, hexagons = hexMap)
+                                } else {
+                                    val currentPlayer =
+                                            players.find { it.id == gameState.currentPlayerId }
+                                    val gameName =
+                                            queries.selectAllGames()
+                                                    .executeAsList()
+                                                    .find { row -> row.id == gameId }
+                                                    ?.name
+                                                    ?: ""
+                                    GameUIState(
+                                            gameId = gameId,
+                                            gameName = gameName,
+                                            currentRound = gameState.currentRound,
+                                            currentPhase = gameState.currentPhase,
+                                            currentPlayer = currentPlayer,
+                                            players = players.sortedBy { it.turnOrder },
+                                            isGameActive = true,
+                                            hexagons = hexMap
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    .stateIn(scope, SharingStarted.WhileSubscribed(), GameUIState())
 
     val savedGames: StateFlow<List<SavedGameSummary>> =
-        queries.selectAllGames().asFlow().mapToList(Dispatchers.Default)
-            .map { rows ->
-                rows.map { row ->
-                    SavedGameSummary(
-                        id = row.id,
-                        name = row.name,
-                        startedAt = row.startedAt,
-                        playerCount = row.playerCount
-                    )
-                }
-            }.stateIn(scope, SharingStarted.WhileSubscribed(), emptyList())
+            queries.selectAllGames()
+                    .asFlow()
+                    .mapToList(Dispatchers.Default)
+                    .map { rows ->
+                        rows.map { row ->
+                            SavedGameSummary(
+                                    id = row.id,
+                                    name = row.name,
+                                    startedAt = row.startedAt,
+                                    playerCount = row.playerCount
+                            )
+                        }
+                    }
+                    .stateIn(scope, SharingStarted.WhileSubscribed(), emptyList())
+
+    private fun colCharToLong(col: String): Long {
+        return when (col) {
+            "a" -> 0
+            "b" -> 1
+            "c" -> 2
+            "d" -> 3
+            "e" -> 4
+            "f" -> 5
+            "g" -> 6
+            "h" -> 7
+            else -> 0
+        }
+    }
 
     fun setupGame(gameName: String, playersInfo: List<Pair<String, String>>) {
         val now = Clock.System.now().toEpochMilliseconds()
@@ -138,7 +228,12 @@ class GameManager(
                 val newStartIndex = ((newRound - 1) % m).toInt()
                 queries.updateGameState(newRound, 1L, players[newStartIndex].id, gameId)
             } else {
-                queries.updateGameState(currentRound, currentPhase + 1, players[startIndex].id, gameId)
+                queries.updateGameState(
+                        currentRound,
+                        currentPhase + 1,
+                        players[startIndex].id,
+                        gameId
+                )
             }
         } else {
             val nextIdx = (currIdx + 1) % m
