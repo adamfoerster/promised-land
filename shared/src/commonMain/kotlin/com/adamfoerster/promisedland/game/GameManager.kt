@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.datetime.Clock
 
 data class SavedGameSummary(
     val id: Long,
@@ -88,7 +89,7 @@ class GameManager(
             }.stateIn(scope, SharingStarted.WhileSubscribed(), emptyList())
 
     fun setupGame(gameName: String, playersInfo: List<Pair<String, String>>) {
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         queries.transaction {
             queries.insertGame(gameName.ifBlank { "Game" }, now)
             val gameId = queries.lastInsertRowId().executeAsOne()
