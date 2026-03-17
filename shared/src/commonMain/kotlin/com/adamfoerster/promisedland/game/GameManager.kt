@@ -49,7 +49,7 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
     private val activeGameId = MutableStateFlow<Long?>(null)
 
     // Increment this whenever you update hexagons.csv
-    private val MAP_DATA_VERSION = 9L
+    private val MAP_DATA_VERSION = 14L
 
     init {
         scope.launch(Dispatchers.Default) { syncMapData() }
@@ -72,7 +72,7 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
                             val col = parts[0].trim().lowercase() ?: return@forEach
                             val row = parts[1].trim().toLongOrNull() ?: return@forEach
                             val name = parts[2].trim().takeIf { it.isNotEmpty() }
-                            val active = parts[3].trim().lowercase() == "true"
+                            val active = parts[3].trim().lowercase() == "true" || parts[3].trim() == "1"
                             val type =
                                     parts[4].trim().lowercase().takeIf {
                                         it != "none" && it.isNotEmpty()
@@ -174,6 +174,8 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
             "f" -> 5
             "g" -> 6
             "h" -> 7
+            "i" -> 8
+            "j" -> 9
             else -> 0
         }
     }
