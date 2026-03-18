@@ -208,6 +208,14 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
         activeGameId.value = null
     }
 
+    fun deleteGame(gameId: Long) {
+        queries.transaction {
+            queries.deleteGameStateForGame(gameId)
+            queries.deletePlayersForGame(gameId)
+            queries.deleteGame(gameId)
+        }
+    }
+
     fun nextTurn() {
         val gameId = activeGameId.value ?: return
         val players = queries.selectPlayersForGame(gameId).executeAsList().sortedBy { it.turnOrder }

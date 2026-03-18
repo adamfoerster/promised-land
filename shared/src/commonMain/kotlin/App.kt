@@ -50,6 +50,9 @@ fun App(driverFactory: DatabaseDriverFactory) {
                     gameManager.loadGame(gameId)
                     screen = Screen.Game
                 },
+                onDeleteGame = { gameId ->
+                    gameManager.deleteGame(gameId)
+                },
                 onBack = { screen = Screen.Welcome }
             )
 

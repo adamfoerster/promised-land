@@ -9,8 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -27,8 +32,11 @@ import kotlinx.datetime.toLocalDateTime
 fun ContinueGameScreen(
     savedGames: List<SavedGameSummary>,
     onSelectGame: (Long) -> Unit,
+    onDeleteGame: (Long) -> Unit,
     onBack: () -> Unit
 ) {
+    var gameToDelete by remember { mutableStateOf<SavedGameSummary?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -70,15 +78,54 @@ fun ContinueGameScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(savedGames) { game ->
-                    SavedGameCard(game = game, onClick = { onSelectGame(game.id) })
+                    SavedGameCard(
+                        game = game,
+                        onClick = { onSelectGame(game.id) },
+                        onDelete = { gameToDelete = game }
+                    )
                 }
             }
         }
     }
+
+    // Confirmation dialog
+    gameToDelete?.let { game ->
+        AlertDialog(
+            onDismissRequest = { gameToDelete = null },
+            title = {
+                Text(
+                    text = "Delete Game",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to delete \"${game.name}\"? This action cannot be undone.",
+                    color = Color(0xFFCCCCCC)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteGame(game.id)
+                    gameToDelete = null
+                }) {
+                    Text("Delete", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { gameToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF9E9E9E))
+                }
+            },
+            backgroundColor = Color(0xFF1E1E30),
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 }
 
 @Composable
-private fun SavedGameCard(game: SavedGameSummary, onClick: () -> Unit) {
+private fun SavedGameCard(game: SavedGameSummary, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -136,11 +183,13 @@ private fun SavedGameCard(game: SavedGameSummary, onClick: () -> Unit) {
                 }
             }
 
-            Text(
-                text = "▶",
-                fontSize = 20.sp,
-                color = Color(0xFF3D5AFE)
-            )
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete game",
+                    tint = Color(0xFF9E9E9E)
+                )
+            }
         }
     }
 }
