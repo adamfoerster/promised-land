@@ -164,6 +164,23 @@ fun HexMap(
                         val hexData = hexagons[c to r] ?: HexagonData(c, r)
                         val hexPath = createHexPath(c, r, hexSize)
                         
+                        // Fill background color based on terrain
+                        val terrainColor = when (hexData.terrain) {
+                            "water" -> Color(0xFF0D47A1) // Dark Blue
+                            "plain" -> Color(0xFF3E2723) // Dark Brown
+                            "mountains" -> Color(0xFF616161) // Gray
+                            "desert" -> Color(0xFFEDC9AF) // Sand color
+                            else -> Color.Transparent
+                        }
+                        
+                        if (terrainColor != Color.Transparent) {
+                            drawPath(
+                                path = hexPath,
+                                color = terrainColor,
+                                style = Fill
+                            )
+                        }
+
                         // Draw hex border
                         drawPath(
                             path = hexPath, 
@@ -227,8 +244,9 @@ fun HexMap(
                     "city" -> " (City)"
                     else -> ""
                 }
+                val terrainText = selectedHex.terrain?.let { " - ${it.replaceFirstChar { char -> char.uppercase() }}" } ?: ""
                 Text(
-                    text = "Selected: ${selectedHex.id}$typeText",
+                    text = "Selected: ${selectedHex.id}$typeText$terrainText",
                     modifier = Modifier.padding(16.dp),
                     color = Color.White,
                     style = MaterialTheme.typography.h6,

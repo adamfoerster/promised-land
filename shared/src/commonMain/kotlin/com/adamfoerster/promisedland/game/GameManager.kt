@@ -49,7 +49,7 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
     private val activeGameId = MutableStateFlow<Long?>(null)
 
     // Increment this whenever you update hexagons.csv
-    private val MAP_DATA_VERSION = 14L
+    private val MAP_DATA_VERSION = 34L
 
     init {
         scope.launch(Dispatchers.Default) { syncMapData() }
@@ -66,10 +66,9 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
                 queries.transaction {
                     queries.deleteAllHexagons()
                     lines.forEach { line ->
-                        println()
                         val parts = line.split(",")
-                        if (parts.size >= 5) {
-                            val col = parts[0].trim().lowercase() ?: return@forEach
+                        if (parts.size >= 6) {
+                            val col = parts[0].trim().lowercase()
                             val row = parts[1].trim().toLongOrNull() ?: return@forEach
                             val name = parts[2].trim().takeIf { it.isNotEmpty() }
                             val active = parts[3].trim().lowercase() == "true" || parts[3].trim() == "1"
@@ -77,8 +76,9 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
                                     parts[4].trim().lowercase().takeIf {
                                         it != "none" && it.isNotEmpty()
                                     }
+                            val terrain = parts[5].trim().lowercase().takeIf { it.isNotEmpty() }
 
-                            queries.insertHexagon(colCharToLong(col), row - 1, name, active, type)
+                            queries.insertHexagon(colCharToLong(col), row - 1, name, active, type, terrain)
                         }
                     }
                     queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
@@ -101,7 +101,8 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
                                             row = row.row.toInt(),
                                             name = row.name ?: "",
                                             isActive = row.isActive,
-                                            type = row.type
+                                            type = row.type,
+                                            terrain = row.terrain
                                     )
                         }
                     }

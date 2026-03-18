@@ -31,6 +31,7 @@ CREATE TABLE Hexagon (
     name TEXT,
     isActive INTEGER AS Boolean NOT NULL DEFAULT 1,
     type TEXT, -- 'city', 'village', or NULL
+    terrain TEXT, -- 'plain', 'mountains', 'water'
     PRIMARY KEY(col, row)
 );
 
@@ -90,8 +91,8 @@ DELETE FROM GameState WHERE gameId = ?;
 
 -- Hexagon queries
 insertHexagon:
-INSERT OR REPLACE INTO Hexagon(col, row, name, isActive, type)
-VALUES (?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO Hexagon(col, row, name, isActive, type, terrain)
+VALUES (?, ?, ?, ?, ?, ?);
 
 selectAllHexagons:
 SELECT * FROM Hexagon;
