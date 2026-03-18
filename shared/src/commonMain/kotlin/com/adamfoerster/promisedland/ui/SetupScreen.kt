@@ -28,8 +28,8 @@ val playerColors = listOf(
 )
 
 @Composable
-fun SetupScreen(onStartGame: (String, List<Pair<String, String>>) -> Unit) {
-    var gameName by remember { mutableStateOf("Game 1") }
+fun SetupScreen(defaultGameName: String = "Game #1", onStartGame: (String, List<Pair<String, String>>) -> Unit) {
+    var gameName by remember { mutableStateOf(defaultGameName) }
     var players by remember { mutableStateOf(List(3) { index -> "Player ${index + 1}" to playerColors[index].first }) }
     var errorMessage by remember { mutableStateOf("") }
 

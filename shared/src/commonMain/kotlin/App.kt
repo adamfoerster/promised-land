@@ -38,6 +38,7 @@ fun App(driverFactory: DatabaseDriverFactory) {
             )
 
             is Screen.Setup -> SetupScreen(
+                defaultGameName = gameManager.nextGameName(),
                 onStartGame = { gameName, players ->
                     gameManager.setupGame(gameName, players)
                     screen = Screen.Game

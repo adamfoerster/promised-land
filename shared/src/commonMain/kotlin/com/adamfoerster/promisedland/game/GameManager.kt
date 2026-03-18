@@ -208,6 +208,15 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
         activeGameId.value = null
     }
 
+    fun nextGameName(): String {
+        val pattern = Regex("""^Game #(\d+)$""")
+        val maxNumber = queries.selectAllGames()
+            .executeAsList()
+            .mapNotNull { pattern.matchEntire(it.name)?.groupValues?.get(1)?.toIntOrNull() }
+            .maxOrNull() ?: 0
+        return "Game #${maxNumber + 1}"
+    }
+
     fun deleteGame(gameId: Long) {
         queries.transaction {
             queries.deleteGameStateForGame(gameId)
