@@ -2,67 +2,54 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamfoerster.promisedland.db.DatabaseDriverFactory
-import com.adamfoerster.promisedland.game.GameManager
 import com.adamfoerster.promisedland.ui.ContinueGameScreen
 import com.adamfoerster.promisedland.ui.GameScreen
 import com.adamfoerster.promisedland.ui.SetupScreen
 import com.adamfoerster.promisedland.ui.WelcomeScreen
-
-sealed class Screen {
-    object Welcome : Screen()
-    object Setup : Screen()
-    object ContinueGame : Screen()
-    object Game : Screen()
-}
+import com.adamfoerster.promisedland.ui.viewmodel.GameViewModel
+import com.adamfoerster.promisedland.ui.viewmodel.Screen
 
 @Composable
 fun App(driverFactory: DatabaseDriverFactory) {
+    val viewModel: GameViewModel = viewModel { GameViewModel(driverFactory) }
+    
     MaterialTheme {
-        val scope = rememberCoroutineScope()
-        val gameManager = remember { GameManager(driverFactory, scope) }
-        val state by gameManager.state.collectAsState()
-        val savedGames by gameManager.savedGames.collectAsState()
-
-        var screen by remember { mutableStateOf<Screen>(Screen.Welcome) }
+        val state by viewModel.state.collectAsState()
+        val savedGames by viewModel.savedGames.collectAsState()
+        val screen = viewModel.currentScreen
 
         when (screen) {
             is Screen.Welcome -> WelcomeScreen(
                 hasSavedGames = savedGames.isNotEmpty(),
-                onNewGame = { screen = Screen.Setup },
-                onContinueGame = { screen = Screen.ContinueGame }
+                onNewGame = { viewModel.navigateTo(Screen.Setup) },
+                onContinueGame = { viewModel.navigateTo(Screen.ContinueGame) }
             )
 
             is Screen.Setup -> SetupScreen(
-                defaultGameName = gameManager.nextGameName(),
+                defaultGameName = viewModel.nextGameName(),
                 onStartGame = { gameName, players ->
-                    gameManager.setupGame(gameName, players)
-                    screen = Screen.Game
+                    viewModel.setupGame(gameName, players)
                 }
             )
 
             is Screen.ContinueGame -> ContinueGameScreen(
                 savedGames = savedGames,
                 onSelectGame = { gameId ->
-                    gameManager.loadGame(gameId)
-                    screen = Screen.Game
+                    viewModel.loadGame(gameId)
                 },
                 onDeleteGame = { gameId ->
-                    gameManager.deleteGame(gameId)
+                    viewModel.deleteGame(gameId)
                 },
-                onBack = { screen = Screen.Welcome }
+                onBack = { viewModel.navigateTo(Screen.Welcome) }
             )
 
             is Screen.Game -> GameScreen(
                 state = state,
-                onNextTurn = { gameManager.nextTurn() },
+                onNextTurn = { viewModel.nextTurn() },
                 onReturnToWelcome = {
-                    gameManager.returnToWelcome()
-                    screen = Screen.Welcome
+                    viewModel.returnToWelcome()
                 }
             )
         }
