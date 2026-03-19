@@ -3,9 +3,10 @@ package com.adamfoerster.promisedland.game
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
+import app.cash.sqldelight.db.SqlDriver
 import com.adamfoerster.promisedland.GameDatabase
 import com.adamfoerster.promisedland.Player
-import com.adamfoerster.promisedland.db.DatabaseDriverFactory
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,8 +42,13 @@ data class GameUIState(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalResourceApi::class)
-class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scope: CoroutineScope) {
-    private val database = GameDatabase(databaseDriverFactory.createDriver())
+class GameManager(
+    val driver: SqlDriver, 
+    private val scope: CoroutineScope,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val skipMapSync: Boolean = false
+) {
+    private val database = GameDatabase(driver)
     private val queries = database.gameDatabaseQueries
 
     // The currently active game id (null = no active game / on welcome screen)
@@ -52,7 +58,9 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
     private val MAP_DATA_VERSION = 34L
 
     init {
-        scope.launch(Dispatchers.Default) { syncMapData() }
+        if (!skipMapSync) {
+            scope.launch(dispatcher) { syncMapData() }
+        }
     }
 
     private suspend fun syncMapData() {
@@ -60,28 +68,35 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
             val currentVersion =
                     queries.getMetadata("map_version").executeAsOneOrNull()?.toLongOrNull() ?: 0L
             if (MAP_DATA_VERSION > currentVersion) {
-                val csvContent = resource("hexagons.csv").readBytes().decodeToString()
-                val lines = csvContent.lines().drop(1).filter { it.isNotBlank() }
+                val csvContent = try {
+                    resource("hexagons.csv").readBytes().decodeToString()
+                } catch (e: Exception) {
+                    null
+                }
+                
+                if (csvContent != null) {
+                    val lines = csvContent.lines().drop(1).filter { it.isNotBlank() }
 
-                queries.transaction {
-                    queries.deleteAllHexagons()
-                    lines.forEach { line ->
-                        val parts = line.split(",")
-                        if (parts.size >= 6) {
-                            val col = parts[0].trim().lowercase()
-                            val row = parts[1].trim().toLongOrNull() ?: return@forEach
-                            val name = parts[2].trim().takeIf { it.isNotEmpty() }
-                            val active = parts[3].trim().lowercase() == "true" || parts[3].trim() == "1"
-                            val type =
-                                    parts[4].trim().lowercase().takeIf {
-                                        it != "none" && it.isNotEmpty()
-                                    }
-                            val terrain = parts[5].trim().lowercase().takeIf { it.isNotEmpty() }
+                    queries.transaction {
+                        queries.deleteAllHexagons()
+                        lines.forEach { line ->
+                            val parts = line.split(",")
+                            if (parts.size >= 6) {
+                                val col = parts[0].trim().lowercase()
+                                val row = parts[1].trim().toLongOrNull() ?: return@forEach
+                                val name = parts[2].trim().takeIf { it.isNotEmpty() }
+                                val active = parts[3].trim().lowercase() == "true" || parts[3].trim() == "1"
+                                val type =
+                                        parts[4].trim().lowercase().takeIf {
+                                            it != "none" && it.isNotEmpty()
+                                        }
+                                val terrain = parts[5].trim().lowercase().takeIf { it.isNotEmpty() }
 
-                            queries.insertHexagon(colCharToLong(col), row - 1, name, active, type, terrain)
+                                queries.insertHexagon(colCharToLong(col), row - 1, name, active, type, terrain)
+                            }
                         }
+                        queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
                     }
-                    queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
                 }
             }
         } catch (e: Exception) {
@@ -92,7 +107,7 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
     val hexagons: StateFlow<Map<Pair<Int, Int>, HexagonData>> =
             queries.selectAllHexagons()
                     .asFlow()
-                    .mapToList(Dispatchers.Default)
+                    .mapToList(dispatcher)
                     .map { rows ->
                         rows.associate { row ->
                             (row.col.toInt() to row.row.toInt()) to
@@ -117,10 +132,10 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
                             combine(
                                     queries.selectPlayersForGame(gameId)
                                             .asFlow()
-                                            .mapToList(Dispatchers.Default),
+                                            .mapToList(dispatcher),
                                     queries.getGameState(gameId)
                                             .asFlow()
-                                            .mapToOneOrNull(Dispatchers.Default)
+                                            .mapToOneOrNull(dispatcher)
                             ) { players: List<Player>, gameState ->
                                 if (gameState == null || players.isEmpty()) {
                                     GameUIState(gameId = gameId, hexagons = hexMap)
@@ -152,7 +167,7 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
     val savedGames: StateFlow<List<SavedGameSummary>> =
             queries.selectAllGames()
                     .asFlow()
-                    .mapToList(Dispatchers.Default)
+                    .mapToList(dispatcher)
                     .map { rows ->
                         rows.map { row ->
                             SavedGameSummary(
@@ -183,9 +198,11 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
 
     fun setupGame(gameName: String, playersInfo: List<Pair<String, String>>) {
         val now = Clock.System.now().toEpochMilliseconds()
+        var newGameId: Long? = null
         queries.transaction {
             queries.insertGame(gameName.ifBlank { "Game" }, now)
             val gameId = queries.lastInsertRowId().executeAsOne()
+            newGameId = gameId
 
             val shuffled = playersInfo.shuffled()
             shuffled.forEachIndexed { index, info ->
@@ -196,9 +213,8 @@ class GameManager(databaseDriverFactory: DatabaseDriverFactory, private val scop
             if (allPlayers.isNotEmpty()) {
                 queries.initializeGame(gameId, allPlayers.first().id)
             }
-
-            activeGameId.value = gameId
         }
+        activeGameId.value = newGameId
     }
 
     fun loadGame(gameId: Long) {

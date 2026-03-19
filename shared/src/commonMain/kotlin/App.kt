@@ -2,6 +2,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamfoerster.promisedland.db.DatabaseDriverFactory
 import com.adamfoerster.promisedland.ui.ContinueGameScreen
@@ -13,7 +14,8 @@ import com.adamfoerster.promisedland.ui.viewmodel.Screen
 
 @Composable
 fun App(driverFactory: DatabaseDriverFactory) {
-    val viewModel: GameViewModel = viewModel { GameViewModel(driverFactory) }
+    val driver = remember { driverFactory.createDriver() }
+    val viewModel: GameViewModel = viewModel { GameViewModel(driver) }
     
     MaterialTheme {
         val state by viewModel.state.collectAsState()

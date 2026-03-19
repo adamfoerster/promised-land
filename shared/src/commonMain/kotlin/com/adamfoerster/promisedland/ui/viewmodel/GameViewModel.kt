@@ -5,10 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.adamfoerster.promisedland.db.DatabaseDriverFactory
+import app.cash.sqldelight.db.SqlDriver
 import com.adamfoerster.promisedland.game.GameManager
 import com.adamfoerster.promisedland.game.GameUIState
 import com.adamfoerster.promisedland.game.SavedGameSummary
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 
 sealed class Screen {
@@ -18,8 +20,11 @@ sealed class Screen {
     object Game : Screen()
 }
 
-class GameViewModel(driverFactory: DatabaseDriverFactory) : ViewModel() {
-    private val gameManager = GameManager(driverFactory, viewModelScope)
+class GameViewModel(
+    driver: SqlDriver,
+    dispatcher: CoroutineDispatcher = Dispatchers.Default
+) : ViewModel() {
+    private val gameManager = GameManager(driver, viewModelScope, dispatcher)
 
     val state: StateFlow<GameUIState> = gameManager.state
     val savedGames: StateFlow<List<SavedGameSummary>> = gameManager.savedGames
