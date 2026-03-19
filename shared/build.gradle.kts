@@ -32,8 +32,8 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
                 
                 // MVVM - Lifecycle dependencies (KMP compatible)
-                implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.0")
-                implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.8.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
             }
         }

@@ -30,7 +30,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.adamfoerster.promisedland.game.GeneralPlacementInfo
 import com.adamfoerster.promisedland.game.HexagonData
+import com.adamfoerster.promisedland.ui.playerColors
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
@@ -48,8 +50,13 @@ fun HexMap(
     modifier: Modifier = Modifier,
     onHexSelected: (HexagonData) -> Unit,
     selectedHex: HexagonData?,
-    hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap()
+    hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
+    generalPlacements: List<GeneralPlacementInfo> = emptyList()
 ) {
+    // Group placements by hex coordinates for efficient lookup
+    val placementsByHex = remember(generalPlacements) {
+        generalPlacements.groupBy { it.hexCol to it.hexRow }
+    }
     val coroutineScope = rememberCoroutineScope()
     val columns = 10
     val rows = 25
@@ -216,6 +223,34 @@ fun HexMap(
                                 with(cityIcon) {
                                     draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.Yellow))
                                 }
+                            }
+                        }
+
+                        // Draw general icons
+                        val generalsHere = placementsByHex[c to r]
+                        if (generalsHere != null && generalsHere.isNotEmpty()) {
+                            val generalIconSize = 20f
+                            generalsHere.forEachIndexed { idx, placement ->
+                                val playerColor = playerColors.find { it.first == placement.playerColor }?.second ?: Color.White
+                                // Offset generals slightly: first one bottom-left, second bottom-right
+                                val offsetX = if (idx == 0) -generalIconSize * 0.6f else generalIconSize * 0.6f
+                                val offsetY = iconSize * 0.5f
+                                val gx = centerX + offsetX - generalIconSize / 2
+                                val gy = centerY + offsetY - generalIconSize / 2
+                                
+                                // Draw a shield shape for the general
+                                val shieldPath = Path().apply {
+                                    val sx = gx + generalIconSize / 2
+                                    val sy = gy
+                                    moveTo(sx - generalIconSize * 0.4f, sy)
+                                    lineTo(sx + generalIconSize * 0.4f, sy)
+                                    lineTo(sx + generalIconSize * 0.4f, sy + generalIconSize * 0.5f)
+                                    lineTo(sx, sy + generalIconSize)
+                                    lineTo(sx - generalIconSize * 0.4f, sy + generalIconSize * 0.5f)
+                                    close()
+                                }
+                                drawPath(path = shieldPath, color = playerColor, style = Fill)
+                                drawPath(path = shieldPath, color = Color.White, style = Stroke(width = 1.5f))
                             }
                         }
                     }

@@ -40,6 +40,37 @@ CREATE TABLE Metadata (
     value TEXT NOT NULL
 );
 
+CREATE TABLE General (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    movements INTEGER NOT NULL DEFAULT 2,
+    strength INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE GeneralPlacement (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    gameId INTEGER NOT NULL,
+    generalId INTEGER NOT NULL,
+    playerId INTEGER NOT NULL,
+    hexCol INTEGER NOT NULL,
+    hexRow INTEGER NOT NULL,
+    FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE,
+    FOREIGN KEY(generalId) REFERENCES General(id),
+    FOREIGN KEY(playerId) REFERENCES Player(id),
+    UNIQUE(gameId, generalId)
+);
+
+CREATE TABLE PlayerHand (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    gameId INTEGER NOT NULL,
+    playerId INTEGER NOT NULL,
+    generalId INTEGER NOT NULL,
+    FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE,
+    FOREIGN KEY(playerId) REFERENCES Player(id),
+    FOREIGN KEY(generalId) REFERENCES General(id),
+    UNIQUE(gameId, generalId)
+);
+
 -- Game queries
 insertGame:
 INSERT INTO Game(name, startedAt)
@@ -102,6 +133,58 @@ SELECT * FROM Hexagon WHERE col = ? AND row = ?;
 
 deleteAllHexagons:
 DELETE FROM Hexagon;
+
+-- General queries
+insertGeneral:
+INSERT OR REPLACE INTO General(name, movements, strength)
+VALUES (?, ?, ?);
+
+selectAllGenerals:
+SELECT * FROM General ORDER BY name ASC;
+
+deleteAllGenerals:
+DELETE FROM General;
+
+-- GeneralPlacement queries
+insertGeneralPlacement:
+INSERT INTO GeneralPlacement(gameId, generalId, playerId, hexCol, hexRow)
+VALUES (?, ?, ?, ?, ?);
+
+selectGeneralPlacementsForGame:
+SELECT gp.id, gp.gameId, gp.generalId, gp.playerId, gp.hexCol, gp.hexRow,
+       g.name AS generalName, g.movements, g.strength,
+       p.color AS playerColor
+FROM GeneralPlacement gp
+JOIN General g ON g.id = gp.generalId
+JOIN Player p ON p.id = gp.playerId
+WHERE gp.gameId = ?;
+
+countGeneralPlacementsByPlayer:
+SELECT COUNT(*) FROM GeneralPlacement WHERE gameId = ? AND playerId = ?;
+
+selectGeneralPlacementsAtHex:
+SELECT gp.playerId FROM GeneralPlacement gp
+WHERE gameId = ? AND hexCol = ? AND hexRow = ?
+GROUP BY gp.playerId;
+
+deleteGeneralPlacementsForGame:
+DELETE FROM GeneralPlacement WHERE gameId = ?;
+
+-- PlayerHand queries
+insertPlayerHand:
+INSERT INTO PlayerHand(gameId, playerId, generalId)
+VALUES (?, ?, ?);
+
+selectPlayerHand:
+SELECT g.* FROM PlayerHand ph
+JOIN General g ON g.id = ph.generalId
+WHERE ph.gameId = ? AND ph.playerId = ?;
+
+deleteFromPlayerHand:
+DELETE FROM PlayerHand WHERE gameId = ? AND generalId = ?;
+
+deletePlayerHandsForGame:
+DELETE FROM PlayerHand WHERE gameId = ?;
 
 -- Metadata queries
 getMetadata:

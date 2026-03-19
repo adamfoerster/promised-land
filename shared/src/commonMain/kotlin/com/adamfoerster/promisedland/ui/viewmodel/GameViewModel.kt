@@ -56,8 +56,13 @@ class GameViewModel(
         gameManager.nextTurn()
     }
 
+    fun placeGeneral(generalId: Long, hexCol: Int, hexRow: Int): String? {
+        return gameManager.placeGeneral(generalId, hexCol, hexRow)
+    }
+
     fun returnToWelcome() {
         gameManager.returnToWelcome()
         navigateTo(Screen.Welcome)
     }
 }
+

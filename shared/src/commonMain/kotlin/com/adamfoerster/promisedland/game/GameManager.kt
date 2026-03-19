@@ -38,7 +38,11 @@ data class GameUIState(
         val currentPlayer: Player? = null,
         val players: List<Player> = emptyList(),
         val isGameActive: Boolean = false,
-        val hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap()
+        val hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
+        val generals: List<GeneralData> = emptyList(),
+        val generalPlacements: List<GeneralPlacementInfo> = emptyList(),
+        val currentPlayerGeneralCount: Int = 0,
+        val playerHand: List<GeneralData> = emptyList()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalResourceApi::class)
@@ -54,8 +58,8 @@ class GameManager(
     // The currently active game id (null = no active game / on welcome screen)
     private val activeGameId = MutableStateFlow<Long?>(null)
 
-    // Increment this whenever you update hexagons.csv
-    private val MAP_DATA_VERSION = 34L
+    // Increment this whenever you update hexagons.csv or generals.csv
+    private val MAP_DATA_VERSION = 36L
 
     init {
         if (!skipMapSync) {
@@ -95,9 +99,36 @@ class GameManager(
                                 queries.insertHexagon(colCharToLong(col), row - 1, name, active, type, terrain)
                             }
                         }
-                        queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
                     }
                 }
+
+                // Sync generals CSV
+                val generalsCsv = try {
+                    resource("generals.csv").readBytes().decodeToString()
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (generalsCsv != null) {
+                    val generalLines = generalsCsv.lines().drop(1).filter { it.isNotBlank() }
+
+                    queries.transaction {
+                        queries.deleteAllGenerals()
+                        generalLines.forEach { line ->
+                            val parts = line.split(",")
+                            if (parts.size >= 3) {
+                                val name = parts[0].trim()
+                                val movements = parts[1].trim().toLongOrNull() ?: 2L
+                                val strength = parts[2].trim().toLongOrNull() ?: 1L
+                                if (name.isNotEmpty()) {
+                                    queries.insertGeneral(name, movements, strength)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                queries.setMetadata("map_version", MAP_DATA_VERSION.toString())
             }
         } catch (e: Exception) {
             println("Error syncing map data: ${e.message}")
@@ -123,11 +154,29 @@ class GameManager(
                     }
                     .stateIn(scope, SharingStarted.WhileSubscribed(), emptyMap())
 
+    val generals: StateFlow<List<GeneralData>> =
+            queries.selectAllGenerals()
+                    .asFlow()
+                    .mapToList(dispatcher)
+                    .map { rows ->
+                        rows.map { row ->
+                            GeneralData(
+                                    id = row.id,
+                                    name = row.name,
+                                    movements = row.movements.toInt(),
+                                    strength = row.strength.toInt()
+                            )
+                        }
+                    }
+                    .stateIn(scope, SharingStarted.WhileSubscribed(), emptyList())
+
     val state: StateFlow<GameUIState> =
-            combine(activeGameId, hexagons) { gameId, hexMap -> gameId to hexMap }
-                    .flatMapLatest { (gameId, hexMap) ->
+            combine(activeGameId, hexagons, generals) { gameId, hexMap, generalsList ->
+                Triple(gameId, hexMap, generalsList)
+            }
+                    .flatMapLatest { (gameId, hexMap, generalsList) ->
                         if (gameId == null) {
-                            flowOf(GameUIState(hexagons = hexMap))
+                            flowOf(GameUIState(hexagons = hexMap, generals = generalsList))
                         } else {
                             combine(
                                     queries.selectPlayersForGame(gameId)
@@ -135,10 +184,13 @@ class GameManager(
                                             .mapToList(dispatcher),
                                     queries.getGameState(gameId)
                                             .asFlow()
-                                            .mapToOneOrNull(dispatcher)
-                            ) { players: List<Player>, gameState ->
+                                            .mapToOneOrNull(dispatcher),
+                                    queries.selectGeneralPlacementsForGame(gameId)
+                                            .asFlow()
+                                            .mapToList(dispatcher)
+                            ) { players: List<Player>, gameState, placements ->
                                 if (gameState == null || players.isEmpty()) {
-                                    GameUIState(gameId = gameId, hexagons = hexMap)
+                                    GameUIState(gameId = gameId, hexagons = hexMap, generals = generalsList)
                                 } else {
                                     val currentPlayer =
                                             players.find { it.id == gameState.currentPlayerId }
@@ -148,6 +200,25 @@ class GameManager(
                                                     .find { row -> row.id == gameId }
                                                     ?.name
                                                     ?: ""
+                                    val placementInfos = placements.map { p ->
+                                        GeneralPlacementInfo(
+                                                generalId = p.generalId,
+                                                generalName = p.generalName,
+                                                playerId = p.playerId,
+                                                playerColor = p.playerColor,
+                                                hexCol = p.hexCol.toInt(),
+                                                hexRow = p.hexRow.toInt()
+                                        )
+                                    }
+                                    val currentPlayerCount = placementInfos.count {
+                                        it.playerId == gameState.currentPlayerId
+                                    }
+                                    
+                                    val playerHandRows = queries.selectPlayerHand(gameId, gameState.currentPlayerId).executeAsList()
+                                    val hand = playerHandRows.map { row -> 
+                                        GeneralData(row.id, row.name, row.movements.toInt(), row.strength.toInt())
+                                    }
+
                                     GameUIState(
                                             gameId = gameId,
                                             gameName = gameName,
@@ -156,7 +227,11 @@ class GameManager(
                                             currentPlayer = currentPlayer,
                                             players = players.sortedBy { it.turnOrder },
                                             isGameActive = true,
-                                            hexagons = hexMap
+                                            hexagons = hexMap,
+                                            generals = generalsList,
+                                            generalPlacements = placementInfos,
+                                            currentPlayerGeneralCount = currentPlayerCount,
+                                            playerHand = hand
                                     )
                                 }
                             }
@@ -205,13 +280,27 @@ class GameManager(
             newGameId = gameId
 
             val shuffled = playersInfo.shuffled()
+            val insertedPlayers = mutableListOf<Long>()
             shuffled.forEachIndexed { index, info ->
                 queries.insertPlayer(gameId, info.first, info.second, index.toLong())
+                insertedPlayers.add(queries.lastInsertRowId().executeAsOne())
             }
 
             val allPlayers = queries.selectPlayersForGame(gameId).executeAsList()
             if (allPlayers.isNotEmpty()) {
                 queries.initializeGame(gameId, allPlayers.first().id)
+            }
+
+            // Distribute 2 random generals to each player
+            val allGenerals = queries.selectAllGenerals().executeAsList().shuffled()
+            var generalIndex = 0
+            insertedPlayers.forEach { playerId ->
+                for (i in 0 until 2) {
+                    if (generalIndex < allGenerals.size) {
+                        queries.insertPlayerHand(gameId, playerId, allGenerals[generalIndex].id)
+                        generalIndex++
+                    }
+                }
             }
         }
         activeGameId.value = newGameId
@@ -236,10 +325,65 @@ class GameManager(
 
     fun deleteGame(gameId: Long) {
         queries.transaction {
+            queries.deletePlayerHandsForGame(gameId)
+            queries.deleteGeneralPlacementsForGame(gameId)
             queries.deleteGameStateForGame(gameId)
             queries.deletePlayersForGame(gameId)
             queries.deleteGame(gameId)
         }
+    }
+
+    /**
+     * Place a general on a hex for the current player.
+     * Rules:
+     * - Only allowed during round 1
+     * - Each player can place at most 2 generals
+     * - Target hex must be a village
+     * - A village can have multiple generals but only from the same player
+     *   (no village can have generals from different players)
+     * - The player must have the general in their hand
+     *
+     * @return null on success, or an error message string on failure
+     */
+    fun placeGeneral(generalId: Long, hexCol: Int, hexRow: Int): String? {
+        val gameId = activeGameId.value ?: return "No active game"
+        val gameState = queries.getGameState(gameId).executeAsOneOrNull() ?: return "No game state"
+        val currentPlayerId = gameState.currentPlayerId
+
+        if (gameState.currentRound != 1L) {
+            return "Generals can only be placed in round 1"
+        }
+
+        val placedCount = queries.countGeneralPlacementsByPlayer(gameId, currentPlayerId)
+                .executeAsOne()
+        if (placedCount >= 2L) {
+            return "You have already placed 2 generals"
+        }
+
+        // Check if general is in hand
+        val handRows = queries.selectPlayerHand(gameId, currentPlayerId).executeAsList()
+        if (handRows.none { it.id == generalId }) {
+            return "You do not have this general in your hand"
+        }
+
+        // Check hex is a village
+        val hex = queries.selectHexagon(hexCol.toLong(), hexRow.toLong()).executeAsOneOrNull()
+        if (hex == null || hex.type != "village") {
+            return "Generals can only be placed in villages"
+        }
+
+        // Check no other player has generals in this village
+        val playersAtHex = queries.selectGeneralPlacementsAtHex(gameId, hexCol.toLong(), hexRow.toLong())
+                .executeAsList()
+        if (playersAtHex.any { it != currentPlayerId }) {
+            return "This village already has generals from another player"
+        }
+
+        queries.transaction {
+            queries.insertGeneralPlacement(gameId, generalId, currentPlayerId, hexCol.toLong(), hexRow.toLong())
+            queries.deleteFromPlayerHand(gameId, generalId)
+        }
+        return null
     }
 
     fun nextTurn() {

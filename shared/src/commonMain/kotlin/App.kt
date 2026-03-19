@@ -52,6 +52,9 @@ fun App(driverFactory: DatabaseDriverFactory) {
                 onNextTurn = { viewModel.nextTurn() },
                 onReturnToWelcome = {
                     viewModel.returnToWelcome()
+                },
+                onPlaceGeneral = { generalId, hexCol, hexRow ->
+                    viewModel.placeGeneral(generalId, hexCol, hexRow)
                 }
             )
         }
