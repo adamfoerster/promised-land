@@ -8,10 +8,14 @@ data class GeneralData(
 )
 
 data class GeneralPlacementInfo(
+    val id: Long,
     val generalId: Long,
     val generalName: String,
     val playerId: Long,
     val playerColor: String,
     val hexCol: Int,
-    val hexRow: Int
+    val hexRow: Int,
+    val movements: Int,
+    val strength: Int,
+    val lastMovedRound: Long = 0L
 )

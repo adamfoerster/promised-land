@@ -42,7 +42,10 @@ data class GameUIState(
         val generals: List<GeneralData> = emptyList(),
         val generalPlacements: List<GeneralPlacementInfo> = emptyList(),
         val currentPlayerGeneralCount: Int = 0,
-        val playerHand: List<GeneralData> = emptyList()
+        val playerHand: List<GeneralData> = emptyList(),
+        val selectedActiveGeneralForMove: GeneralPlacementInfo? = null,
+        val reachableHexes: Set<Pair<Int, Int>> = emptySet(),
+        val idleGenerals: List<GeneralPlacementInfo> = emptyList()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalResourceApi::class)
@@ -57,9 +60,12 @@ class GameManager(
 
     // The currently active game id (null = no active game / on welcome screen)
     private val activeGameId = MutableStateFlow<Long?>(null)
+    
+    // The currently selected general placement id for movement
+    private val selectedActiveGeneralPlacementId = MutableStateFlow<Long?>(null)
 
     // Increment this whenever you update hexagons.csv or generals.csv
-    private val MAP_DATA_VERSION = 36L
+    private val MAP_DATA_VERSION = 37L
 
     init {
         if (!skipMapSync) {
@@ -187,8 +193,9 @@ class GameManager(
                                             .mapToOneOrNull(dispatcher),
                                     queries.selectGeneralPlacementsForGame(gameId)
                                             .asFlow()
-                                            .mapToList(dispatcher)
-                            ) { players: List<Player>, gameState, placements ->
+                                            .mapToList(dispatcher),
+                                    selectedActiveGeneralPlacementId
+                            ) { players: List<Player>, gameState, placements, selectedGeneralId ->
                                 if (gameState == null || players.isEmpty()) {
                                     GameUIState(gameId = gameId, hexagons = hexMap, generals = generalsList)
                                 } else {
@@ -202,12 +209,16 @@ class GameManager(
                                                     ?: ""
                                     val placementInfos = placements.map { p ->
                                         GeneralPlacementInfo(
+                                                id = p.id,
                                                 generalId = p.generalId,
                                                 generalName = p.generalName,
                                                 playerId = p.playerId,
                                                 playerColor = p.playerColor,
                                                 hexCol = p.hexCol.toInt(),
-                                                hexRow = p.hexRow.toInt()
+                                                hexRow = p.hexRow.toInt(),
+                                                movements = p.movements.toInt(),
+                                                strength = p.strength.toInt(),
+                                                lastMovedRound = p.lastMovedRound
                                         )
                                     }
                                     val currentPlayerCount = placementInfos.count {
@@ -217,6 +228,20 @@ class GameManager(
                                     val playerHandRows = queries.selectPlayerHand(gameId, gameState.currentPlayerId).executeAsList()
                                     val hand = playerHandRows.map { row -> 
                                         GeneralData(row.id, row.name, row.movements.toInt(), row.strength.toInt())
+                                    }
+
+                                    val idleGenerals = placementInfos.filter { 
+                                        it.playerId == gameState.currentPlayerId && it.lastMovedRound < gameState.currentRound 
+                                    }
+                                    
+                                    val selectedActiveGeneral = placementInfos.find { it.id == selectedGeneralId }
+                                    val reachableHexes = if (selectedActiveGeneral != null && selectedActiveGeneral.lastMovedRound < gameState.currentRound) {
+                                        computeReachableHexes(
+                                            selectedActiveGeneral.hexCol, selectedActiveGeneral.hexRow,
+                                            selectedActiveGeneral.movements, hexMap, placementInfos, gameState.currentPlayerId
+                                        )
+                                    } else {
+                                        emptySet()
                                     }
 
                                     GameUIState(
@@ -231,7 +256,10 @@ class GameManager(
                                             generals = generalsList,
                                             generalPlacements = placementInfos,
                                             currentPlayerGeneralCount = currentPlayerCount,
-                                            playerHand = hand
+                                            playerHand = hand,
+                                            selectedActiveGeneralForMove = selectedActiveGeneral,
+                                            reachableHexes = reachableHexes,
+                                            idleGenerals = idleGenerals
                                     )
                                 }
                             }
@@ -269,6 +297,74 @@ class GameManager(
             "j" -> 9
             else -> 0
         }
+    }
+
+    private fun loadHexagonMap(): Map<Pair<Int, Int>, HexagonData> {
+        return queries.selectAllHexagons()
+            .executeAsList()
+            .associate { row ->
+                (row.col.toInt() to row.row.toInt()) to
+                    HexagonData(
+                        col = row.col.toInt(),
+                        row = row.row.toInt(),
+                        name = row.name ?: "",
+                        isActive = row.isActive,
+                        type = row.type,
+                        terrain = row.terrain
+                    )
+            }
+    }
+
+    private fun computeReachableHexes(
+        startCol: Int, startRow: Int, movements: Int,
+        hexMap: Map<Pair<Int, Int>, HexagonData>,
+        placements: List<GeneralPlacementInfo>,
+        currentPlayerId: Long
+    ): Set<Pair<Int, Int>> {
+        val costs = mutableMapOf<Pair<Int, Int>, Int>()
+        val queue = mutableListOf<Pair<Int, Int>>()
+
+        costs[startCol to startRow] = 0
+        queue.add(startCol to startRow)
+
+        while (queue.isNotEmpty()) {
+            val curr = queue.minByOrNull { costs[it]!! }!!
+            queue.remove(curr)
+            val currCost = costs[curr]!!
+
+            if (currCost > movements) continue
+
+            getNeighbors(curr.first, curr.second).forEach { n ->
+                val hex = hexMap[n]
+                if (hex != null && hex.isActive && hex.terrain != "water") {
+                    val enemies = placements.filter { it.hexCol == n.first && it.hexRow == n.second && it.playerId != currentPlayerId }
+                    if (enemies.isEmpty()) {
+                        val cost = when (hex.terrain) {
+                            "mountains" -> 2
+                            "desert" -> 2
+                            else -> 1
+                        }
+                        val newCost = currCost + cost
+                        if (newCost <= movements) {
+                            if (newCost < (costs[n] ?: Int.MAX_VALUE)) {
+                                costs[n] = newCost
+                                if (!queue.contains(n)) queue.add(n)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return costs.keys.filter { it != (startCol to startRow) }.toSet()
+    }
+
+    private fun getNeighbors(col: Int, row: Int): List<Pair<Int, Int>> {
+        val offsets = if (row % 2 != 0) {
+            listOf(0 to -1, 1 to -1, -1 to 0, 1 to 0, 0 to 1, 1 to 1)
+        } else {
+            listOf(-1 to -1, 0 to -1, -1 to 0, 1 to 0, -1 to 1, 0 to 1)
+        }
+        return offsets.map { (c, r) -> col + c to row + r }
     }
 
     fun setupGame(gameName: String, playersInfo: List<Pair<String, String>>) {
@@ -380,9 +476,70 @@ class GameManager(
         }
 
         queries.transaction {
-            queries.insertGeneralPlacement(gameId, generalId, currentPlayerId, hexCol.toLong(), hexRow.toLong())
+            queries.insertGeneralPlacement(gameId, generalId, currentPlayerId, hexCol.toLong(), hexRow.toLong(), 0L)
             queries.deleteFromPlayerHand(gameId, generalId)
         }
+        return null
+    }
+
+    fun selectActiveGeneral(placementId: Long?) {
+        selectedActiveGeneralPlacementId.value = placementId
+    }
+
+    fun moveGeneral(placementId: Long, targetCol: Int, targetRow: Int): String? {
+        val gameId = activeGameId.value ?: return "No active game"
+        val gameState = queries.getGameState(gameId).executeAsOneOrNull() ?: return "No game state"
+        val currentPlayerId = gameState.currentPlayerId
+
+        if (gameState.currentRound == 1L) {
+            return "Generals cannot move in round 1"
+        }
+
+        val placements = queries.selectGeneralPlacementsForGame(gameId).executeAsList()
+        val placement = placements.find { it.id == placementId }
+            ?: return "Placement not found"
+
+        if (placement.playerId != currentPlayerId) {
+            return "Not your general"
+        }
+
+        if (placement.lastMovedRound >= gameState.currentRound) {
+            return "General already moved this round"
+        }
+
+        val placementInfos = placements.map { p ->
+            GeneralPlacementInfo(
+                id = p.id,
+                generalId = p.generalId,
+                generalName = p.generalName,
+                playerId = p.playerId,
+                playerColor = p.playerColor,
+                hexCol = p.hexCol.toInt(),
+                hexRow = p.hexRow.toInt(),
+                movements = p.movements.toInt(),
+                strength = p.strength.toInt(),
+                lastMovedRound = p.lastMovedRound
+            )
+        }
+        val reachableHexes =
+            computeReachableHexes(
+                startCol = placement.hexCol.toInt(),
+                startRow = placement.hexRow.toInt(),
+                movements = placement.movements.toInt(),
+                hexMap = loadHexagonMap(),
+                placements = placementInfos,
+                currentPlayerId = currentPlayerId
+            )
+        val isLegal = (targetCol to targetRow) in reachableHexes
+
+        if (!isLegal) {
+            return "This general cannot move to that hex"
+        }
+
+        queries.transaction {
+            queries.updateGeneralLocation(targetCol.toLong(), targetRow.toLong(), gameState.currentRound, placementId)
+        }
+        selectedActiveGeneralPlacementId.value = null
         return null
     }
 
@@ -407,6 +564,7 @@ class GameManager(
                 val newRound = currentRound + 1
                 val newStartIndex = ((newRound - 1) % m).toInt()
                 queries.updateGameState(newRound, 1L, players[newStartIndex].id, gameId)
+                selectedActiveGeneralPlacementId.value = null
             } else {
                 queries.updateGameState(
                         currentRound,
@@ -414,10 +572,12 @@ class GameManager(
                         players[startIndex].id,
                         gameId
                 )
+                selectedActiveGeneralPlacementId.value = null
             }
         } else {
             val nextIdx = (currIdx + 1) % m
             queries.updateGameState(currentRound, currentPhase, players[nextIdx].id, gameId)
+            selectedActiveGeneralPlacementId.value = null
         }
     }
 }

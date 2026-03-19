@@ -60,6 +60,14 @@ class GameViewModel(
         return gameManager.placeGeneral(generalId, hexCol, hexRow)
     }
 
+    fun selectActiveGeneral(placementId: Long?) {
+        gameManager.selectActiveGeneral(placementId)
+    }
+
+    fun moveGeneral(placementId: Long, hexCol: Int, hexRow: Int): String? {
+        return gameManager.moveGeneral(placementId, hexCol, hexRow)
+    }
+
     fun returnToWelcome() {
         gameManager.returnToWelcome()
         navigateTo(Screen.Welcome)

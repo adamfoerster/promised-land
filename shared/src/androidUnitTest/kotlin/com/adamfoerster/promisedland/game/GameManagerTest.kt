@@ -5,6 +5,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.cash.turbine.test
 import com.adamfoerster.promisedland.GameDatabase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -14,21 +15,52 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GameManagerTest {
     private lateinit var driver: SqlDriver
+    private lateinit var database: GameDatabase
 
     @Before
     fun setup() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         GameDatabase.Schema.create(driver)
+        database = GameDatabase(driver)
     }
 
     @After
     fun tearDown() {
         driver.close()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun selectedPlacementFlow(gameManager: GameManager): MutableStateFlow<Long?> {
+        val field = GameManager::class.java.getDeclaredField("selectedActiveGeneralPlacementId")
+        field.isAccessible = true
+        return field.get(gameManager) as MutableStateFlow<Long?>
+    }
+
+    private fun seedMovementScenario(gameManager: GameManager): Triple<Long, Long, Long> {
+        val queries = database.gameDatabaseQueries
+
+        queries.insertGeneral("Atlas", 2, 3)
+        queries.insertGeneral("Boreas", 2, 2)
+        queries.insertHexagon(0, 0, "A1", true, "village", "plain")
+        queries.insertHexagon(1, 0, "B1", true, null, "mountains")
+        queries.insertHexagon(2, 0, "C1", true, null, "plain")
+
+        gameManager.setupGame("Movement Test", listOf("Alice" to "#FF0000"))
+
+        val gameId = queries.selectAllGames().executeAsOne().id
+        val currentPlayer = queries.selectPlayersForGame(gameId).executeAsOne()
+        val generalId = queries.selectPlayerHand(gameId, currentPlayer.id).executeAsList().first().id
+        assertNull(gameManager.placeGeneral(generalId, 0, 0))
+        queries.updateGameState(2, 1, currentPlayer.id, gameId)
+        val placementId = queries.selectGeneralPlacementsForGame(gameId).executeAsOne().id
+
+        return Triple(gameId, currentPlayer.id, placementId)
     }
 
     @Test
@@ -167,5 +199,69 @@ class GameManagerTest {
             advanceUntilIdle()
             assertEquals(2, awaitItem().currentPhase)
         }
+    }
+
+    @Test
+    fun testMoveGeneralRespectsReachabilityAndTerrainCost() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val gameManager = GameManager(driver, backgroundScope, dispatcher, skipMapSync = true)
+        advanceUntilIdle()
+        val queries = database.gameDatabaseQueries
+        val (gameId, _, placementId) = seedMovementScenario(gameManager)
+        advanceUntilIdle()
+
+        assertEquals(
+            "This general cannot move to that hex",
+            gameManager.moveGeneral(placementId, 2, 0)
+        )
+
+        assertNull(gameManager.moveGeneral(placementId, 1, 0))
+        val movedPlacement = queries.selectGeneralPlacementsForGame(gameId).executeAsOne()
+        assertEquals(1, movedPlacement.hexCol)
+        assertEquals(0, movedPlacement.hexRow)
+    }
+
+    @Test
+    fun testSelectActiveGeneralStoresPlacementId() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val gameManager = GameManager(driver, backgroundScope, dispatcher, skipMapSync = true)
+
+        val (_, _, placementId) = seedMovementScenario(gameManager)
+        advanceUntilIdle()
+
+        gameManager.selectActiveGeneral(placementId)
+
+        assertEquals(placementId, selectedPlacementFlow(gameManager).value)
+    }
+
+    @Test
+    fun testMoveGeneralMarksPlacementAsMovedThisRound() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val gameManager = GameManager(driver, backgroundScope, dispatcher, skipMapSync = true)
+        val queries = database.gameDatabaseQueries
+
+        val (gameId, _, placementId) = seedMovementScenario(gameManager)
+        advanceUntilIdle()
+
+        assertNull(gameManager.moveGeneral(placementId, 1, 0))
+        advanceUntilIdle()
+
+        val movedPlacement = queries.selectGeneralPlacementsForGame(gameId).executeAsOne()
+        assertEquals(2L, movedPlacement.lastMovedRound)
+    }
+
+    @Test
+    fun testNextTurnClearsSelectedGeneralPlacement() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val gameManager = GameManager(driver, backgroundScope, dispatcher, skipMapSync = true)
+
+        val (_, _, placementId) = seedMovementScenario(gameManager)
+        advanceUntilIdle()
+
+        gameManager.selectActiveGeneral(placementId)
+        assertEquals(placementId, selectedPlacementFlow(gameManager).value)
+
+        gameManager.nextTurn()
+        assertNull(selectedPlacementFlow(gameManager).value)
     }
 }

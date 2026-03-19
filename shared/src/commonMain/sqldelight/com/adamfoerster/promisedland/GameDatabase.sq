@@ -54,6 +54,7 @@ CREATE TABLE GeneralPlacement (
     playerId INTEGER NOT NULL,
     hexCol INTEGER NOT NULL,
     hexRow INTEGER NOT NULL,
+    lastMovedRound INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(gameId) REFERENCES Game(id) ON DELETE CASCADE,
     FOREIGN KEY(generalId) REFERENCES General(id),
     FOREIGN KEY(playerId) REFERENCES Player(id),
@@ -147,17 +148,18 @@ DELETE FROM General;
 
 -- GeneralPlacement queries
 insertGeneralPlacement:
-INSERT INTO GeneralPlacement(gameId, generalId, playerId, hexCol, hexRow)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO GeneralPlacement(gameId, generalId, playerId, hexCol, hexRow, lastMovedRound)
+VALUES (?, ?, ?, ?, ?, ?);
 
 selectGeneralPlacementsForGame:
-SELECT gp.id, gp.gameId, gp.generalId, gp.playerId, gp.hexCol, gp.hexRow,
+SELECT gp.id, gp.gameId, gp.generalId, gp.playerId, gp.hexCol, gp.hexRow, gp.lastMovedRound,
        g.name AS generalName, g.movements, g.strength,
        p.color AS playerColor
 FROM GeneralPlacement gp
 JOIN General g ON g.id = gp.generalId
 JOIN Player p ON p.id = gp.playerId
-WHERE gp.gameId = ?;
+WHERE gp.gameId = ?
+ORDER BY gp.id ASC;
 
 countGeneralPlacementsByPlayer:
 SELECT COUNT(*) FROM GeneralPlacement WHERE gameId = ? AND playerId = ?;
@@ -169,6 +171,11 @@ GROUP BY gp.playerId;
 
 deleteGeneralPlacementsForGame:
 DELETE FROM GeneralPlacement WHERE gameId = ?;
+
+updateGeneralLocation:
+UPDATE GeneralPlacement
+SET hexCol = ?, hexRow = ?, lastMovedRound = ?
+WHERE id = ?;
 
 -- PlayerHand queries
 insertPlayerHand:

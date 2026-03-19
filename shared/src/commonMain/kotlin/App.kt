@@ -55,6 +55,12 @@ fun App(driverFactory: DatabaseDriverFactory) {
                 },
                 onPlaceGeneral = { generalId, hexCol, hexRow ->
                     viewModel.placeGeneral(generalId, hexCol, hexRow)
+                },
+                onSelectActiveGeneral = { placementId ->
+                    viewModel.selectActiveGeneral(placementId)
+                },
+                onMoveGeneral = { placementId, hexCol, hexRow ->
+                    viewModel.moveGeneral(placementId, hexCol, hexRow)
                 }
             )
         }
