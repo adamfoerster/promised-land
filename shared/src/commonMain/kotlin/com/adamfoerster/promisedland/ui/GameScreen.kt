@@ -2,9 +2,6 @@ package com.adamfoerster.promisedland.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -16,8 +13,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.adamfoerster.promisedland.game.GameUIState
 import com.adamfoerster.promisedland.game.GeneralData
 import com.adamfoerster.promisedland.game.GeneralPlacementInfo
@@ -54,7 +49,7 @@ fun GameScreen(
 
     var zoomCycleCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val isPlacementPhase = state.currentPhase == 1L
+    val isPlacementPhase = state.currentPhase == 3L
     val needsPlacement = isPlacementPhase && state.currentPlayerGeneralCount < 2
 
     val placementsOnSelectedHex = if (selectedHex != null) {
@@ -79,6 +74,7 @@ fun GameScreen(
                     val error = onPlaceGeneral(selectedGeneralFromHand!!.id, hex.col, hex.row)
                     if (error == null) {
                         selectedGeneralFromHand = null
+                        selectedHex = hex
                         placementError = ""
                     } else {
                         placementError = error
@@ -130,113 +126,16 @@ fun GameScreen(
         }
     }
 
-    if (showHandModal) {
-        Dialog(
-            onDismissRequest = { showHandModal = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF2C2C2C)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        "Your Hand",
-                        style = MaterialTheme.typography.h5,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    if (state.playerHand.isEmpty()) {
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Your hand is empty.", color = Color.LightGray)
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            items(state.playerHand) { card ->
-                                Card(
-                                    backgroundColor = Color(0xFF3C3C3C),
-                                    shape = RoundedCornerShape(12.dp),
-                                    elevation = 8.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            card.name,
-                                            style = MaterialTheme.typography.h6,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "Movements: ${card.movements}",
-                                            style = MaterialTheme.typography.body2,
-                                            color = Color.LightGray
-                                        )
-                                        Text(
-                                            "Strength: ${card.strength}",
-                                            style = MaterialTheme.typography.body2,
-                                            color = Color.LightGray
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-
-                                        if (isPlacementPhase) {
-                                            Button(
-                                                onClick = {
-                                                    selectedGeneralFromHand = card
-                                                    showHandModal = false
-                                                },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    backgroundColor = Color(0xFFE91E63),
-                                                    contentColor = Color.White
-                                                )
-                                            ) {
-                                                Text("Place")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { showHandModal = false },
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            backgroundColor = Color.Transparent,
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.elevation(0.dp)
-                    ) {
-                        Text("Close")
-                    }
-                }
-            }
+    HandModal(
+        showHandModal = showHandModal,
+        onDismiss = { showHandModal = false },
+        playerHand = state.playerHand,
+        isPlacementPhase = isPlacementPhase,
+        onGeneralSelected = { card ->
+            selectedGeneralFromHand = card
+            showHandModal = false
         }
-    }
+    )
 
     if (showEndTurnConfirm) {
         AlertDialog(

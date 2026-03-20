@@ -19,6 +19,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import com.adamfoerster.promisedland.game.GameUIState
 
+private val phaseNames = listOf(
+    "1. Announcements",
+    "2. Draw Cards",
+    "3. Income",
+    "4. Acquisitions",
+    "5. Movement",
+    "6. Combat",
+    "7. Check Victory"
+)
+
 @Composable
 fun TopBar(
     state: GameUIState,
@@ -69,7 +79,7 @@ fun TopBar(
                         )
                     }
                     Text(
-                        "Round ${state.currentRound} - Phase ${state.currentPhase}",
+                        "Round ${state.currentRound} - ${phaseNames.getOrElse(state.currentPhase.toInt() - 1) { " ${state.currentPhase}" }}",
                         style = MaterialTheme.typography.caption,
                         color = Color.LightGray
                     )

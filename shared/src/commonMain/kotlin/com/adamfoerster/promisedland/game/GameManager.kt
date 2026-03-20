@@ -550,6 +550,7 @@ class GameManager(
 
         if (players.isEmpty() || gameState == null) return
 
+        val activePhases = listOf(3L, 4L, 5L)
         val m = players.size
         val currentRound = gameState.currentRound
         val currentPhase = gameState.currentPhase
@@ -560,18 +561,15 @@ class GameManager(
         val lastIndex = (startIndex + m - 1) % m
 
         if (currIdx == lastIndex) {
-            if (currentPhase == 7L) {
+            val currentPhaseIndex = activePhases.indexOf(currentPhase)
+            if (currentPhaseIndex == activePhases.size - 1) {
                 val newRound = currentRound + 1
                 val newStartIndex = ((newRound - 1) % m).toInt()
-                queries.updateGameState(newRound, 1L, players[newStartIndex].id, gameId)
+                queries.updateGameState(newRound, activePhases[0], players[newStartIndex].id, gameId)
                 selectedActiveGeneralPlacementId.value = null
             } else {
-                queries.updateGameState(
-                        currentRound,
-                        currentPhase + 1,
-                        players[startIndex].id,
-                        gameId
-                )
+                val nextPhase = activePhases[currentPhaseIndex + 1]
+                queries.updateGameState(currentRound, nextPhase, players[startIndex].id, gameId)
                 selectedActiveGeneralPlacementId.value = null
             }
         } else {
