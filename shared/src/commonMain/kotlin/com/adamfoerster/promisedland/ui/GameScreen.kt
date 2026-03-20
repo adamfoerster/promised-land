@@ -25,7 +25,8 @@ fun GameScreen(
     onReturnToWelcome: () -> Unit,
     onPlaceGeneral: (generalId: Long, hexCol: Int, hexRow: Int) -> String?,
     onSelectActiveGeneral: (placementId: Long?) -> Unit,
-    onMoveGeneral: (placementId: Long, hexCol: Int, hexRow: Int) -> String?
+    onMoveGeneral: (placementId: Long, hexCol: Int, hexRow: Int) -> String?,
+    onPurchaseImprovements: (purchases: List<com.adamfoerster.promisedland.game.PurchaseItem>) -> String?
 ) {
     if (state.currentPlayer == null) {
         Box(
@@ -41,6 +42,8 @@ fun GameScreen(
 
     var showHandModal by remember { mutableStateOf(false) }
     var showEndTurnConfirm by remember { mutableStateOf(false) }
+    var hasSeenIncomeThisTurn by remember(state.currentRound, state.currentPlayer) { mutableStateOf(false) }
+    var showAcquisitionsModal by remember(state.currentRound, state.currentPlayer) { mutableStateOf(false) }
     var selectedHex by remember { mutableStateOf<HexagonData?>(null) }
     var selectedGeneralFromHand by remember { mutableStateOf<GeneralData?>(null) }
     var placementError by remember { mutableStateOf("") }
@@ -49,7 +52,7 @@ fun GameScreen(
 
     var zoomCycleCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val isPlacementPhase = state.currentPhase == 3L
+    val isPlacementPhase = state.currentPhase == 2L
     val needsPlacement = isPlacementPhase && state.currentPlayerGeneralCount < 2
 
     val placementsOnSelectedHex = if (selectedHex != null) {
@@ -66,6 +69,8 @@ fun GameScreen(
             hexagons = state.hexagons,
             selectedHex = selectedHex,
             generalPlacements = state.generalPlacements,
+            hexImprovements = state.hexImprovements,
+            players = state.players,
             reachableHexes = state.reachableHexes,
             scrollToHexTarget = scrollToHexTarget,
             onZoomCycleReady = { callback -> zoomCycleCallback = callback },
@@ -106,6 +111,7 @@ fun GameScreen(
                 state = state,
                 showHandModal = showHandModal,
                 onShowHandModal = { showHandModal = it },
+                onShowAcquisitionsModal = { showAcquisitionsModal = it },
                 isPlacementPhase = isPlacementPhase,
                 needsPlacement = needsPlacement,
                 placementError = placementError,
@@ -136,6 +142,21 @@ fun GameScreen(
             showHandModal = false
         }
     )
+
+    if (state.currentPhase == 3L && !hasSeenIncomeThisTurn) {
+        IncomeModal(
+            state = state,
+            onDismiss = { hasSeenIncomeThisTurn = true }
+        )
+    }
+
+    if (state.currentPhase == 4L && showAcquisitionsModal) {
+        AcquisitionsModal(
+            state = state,
+            onBuy = onPurchaseImprovements,
+            onDismiss = { showAcquisitionsModal = false }
+        )
+    }
 
     if (showEndTurnConfirm) {
         AlertDialog(
@@ -171,6 +192,7 @@ fun GameScreen(
 fun HexInfoSection(
     selectedHex: HexagonData?,
     placementsOnSelectedHex: List<GeneralPlacementInfo>,
+    improvement: com.adamfoerster.promisedland.game.HexImprovementInfo?,
     activeGeneralForMove: GeneralPlacementInfo?
 ) {
     if (selectedHex == null) {
@@ -209,6 +231,20 @@ fun HexInfoSection(
         color = Color.LightGray,
         style = MaterialTheme.typography.caption
     )
+
+    if (improvement != null) {
+        val features = mutableListOf<String>()
+        if (improvement.troops > 0) features.add("${improvement.troops} Troops")
+        if (improvement.walls > 0) features.add("${improvement.walls} Wall")
+        if (improvement.developments > 0) features.add("${improvement.developments} Dev")
+        if (features.isNotEmpty()) {
+            Text(
+                text = "City Improvements: ${features.joinToString(", ")}",
+                color = Color(0xFF81D4FA),
+                style = MaterialTheme.typography.caption
+            )
+        }
+    }
 
     if (placementsOnSelectedHex.isEmpty()) {
         Text(

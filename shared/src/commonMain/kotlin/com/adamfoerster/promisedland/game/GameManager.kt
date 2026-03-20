@@ -23,6 +23,18 @@ import kotlinx.datetime.Clock
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.resource
 
+data class PurchaseItem(val hexCol: Int, val hexRow: Int, val itemType: String)
+
+data class HexImprovementInfo(
+    val id: Long,
+    val hexCol: Int,
+    val hexRow: Int,
+    val troops: Int,
+    val walls: Int,
+    val developments: Int,
+    val playerId: Long
+)
+
 data class SavedGameSummary(
         val id: Long,
         val name: String,
@@ -45,7 +57,8 @@ data class GameUIState(
         val playerHand: List<GeneralData> = emptyList(),
         val selectedActiveGeneralForMove: GeneralPlacementInfo? = null,
         val reachableHexes: Set<Pair<Int, Int>> = emptySet(),
-        val idleGenerals: List<GeneralPlacementInfo> = emptyList()
+        val idleGenerals: List<GeneralPlacementInfo> = emptyList(),
+        val hexImprovements: List<HexImprovementInfo> = emptyList()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalResourceApi::class)
@@ -194,8 +207,11 @@ class GameManager(
                                     queries.selectGeneralPlacementsForGame(gameId)
                                             .asFlow()
                                             .mapToList(dispatcher),
+                                    queries.getHexImprovementsForGame(gameId)
+                                            .asFlow()
+                                            .mapToList(dispatcher),
                                     selectedActiveGeneralPlacementId
-                            ) { players: List<Player>, gameState, placements, selectedGeneralId ->
+                            ) { players: List<Player>, gameState, placements, improvements, selectedGeneralId ->
                                 if (gameState == null || players.isEmpty()) {
                                     GameUIState(gameId = gameId, hexagons = hexMap, generals = generalsList)
                                 } else {
@@ -244,6 +260,14 @@ class GameManager(
                                         emptySet()
                                     }
 
+                                    val improvementInfos = improvements.map {
+                                        HexImprovementInfo(
+                                            it.id, it.hexCol.toInt(), it.hexRow.toInt(),
+                                            it.troops.toInt(), it.walls.toInt(), it.developments.toInt(),
+                                            it.playerId
+                                        )
+                                    }
+
                                     GameUIState(
                                             gameId = gameId,
                                             gameName = gameName,
@@ -259,7 +283,8 @@ class GameManager(
                                             playerHand = hand,
                                             selectedActiveGeneralForMove = selectedActiveGeneral,
                                             reachableHexes = reachableHexes,
-                                            idleGenerals = idleGenerals
+                                            idleGenerals = idleGenerals,
+                                            hexImprovements = improvementInfos
                                     )
                                 }
                             }
@@ -446,14 +471,14 @@ class GameManager(
         val gameState = queries.getGameState(gameId).executeAsOneOrNull() ?: return "No game state"
         val currentPlayerId = gameState.currentPlayerId
 
-        if (gameState.currentRound != 1L) {
-            return "Generals can only be placed in round 1"
+        if (gameState.currentPhase != 2L) {
+            return "Generals can only be placed in the Draw Cards phase"
         }
 
         val placedCount = queries.countGeneralPlacementsByPlayer(gameId, currentPlayerId)
                 .executeAsOne()
-        if (placedCount >= 2L) {
-            return "You have already placed 2 generals"
+        if (gameState.currentRound == 1L && placedCount >= 2L) {
+            return "You have already placed 2 generals this round"
         }
 
         // Check if general is in hand
@@ -491,8 +516,8 @@ class GameManager(
         val gameState = queries.getGameState(gameId).executeAsOneOrNull() ?: return "No game state"
         val currentPlayerId = gameState.currentPlayerId
 
-        if (gameState.currentRound == 1L) {
-            return "Generals cannot move in round 1"
+        if (gameState.currentPhase != 5L) {
+            return "Generals can only move during the Movement phase"
         }
 
         val placements = queries.selectGeneralPlacementsForGame(gameId).executeAsList()
@@ -543,6 +568,102 @@ class GameManager(
         return null
     }
 
+    fun purchaseImprovements(purchases: List<PurchaseItem>): String? {
+        val gameId = activeGameId.value ?: return "No active game"
+        val gameState = queries.getGameState(gameId).executeAsOneOrNull() ?: return "No game state"
+        val currentPlayerId = gameState.currentPlayerId
+
+        if (gameState.currentPhase != 4L) {
+            return "Can only purchase during Acquisitions phase"
+        }
+
+        val currentPlayer = queries.selectPlayersForGame(gameId).executeAsList().find { it.id == currentPlayerId }
+                ?: return "Player not found"
+        
+        var totalCost = 0L
+        for (p in purchases) {
+            totalCost += when (p.itemType) {
+                "troop" -> 2L
+                "development" -> 6L
+                "wall" -> 10L
+                else -> 0L
+            }
+        }
+
+        if (currentPlayer.balance < totalCost) {
+            return "Insufficient funds"
+        }
+
+        val improvements = queries.getHexImprovementsForGame(gameId).executeAsList().toMutableList()
+
+        // Apply changes
+        queries.transaction {
+            queries.setPlayerBalance(currentPlayer.balance - totalCost, currentPlayerId)
+
+            val grouped = purchases.groupBy { it.hexCol to it.hexRow }
+            grouped.forEach { (colRow, items) ->
+                val (col, row) = colRow
+                val existing = improvements.find { it.hexCol.toInt() == col && it.hexRow.toInt() == row }
+                val troopsToAdd = items.count { it.itemType == "troop" }
+                val wallsToAdd = items.count { it.itemType == "wall" }
+                val devsToAdd = items.count { it.itemType == "development" }
+
+                if (existing != null) {
+                    val newTroops = existing.troops + troopsToAdd
+                    val newWalls = existing.walls + wallsToAdd
+                    val newDevs = existing.developments + devsToAdd
+                    
+                    if (newWalls > 1) throw IllegalArgumentException("Too many walls on hex $col,$row")
+                    if (newDevs > 2) throw IllegalArgumentException("Too many developments on hex $col,$row")
+                    
+                    queries.insertOrUpdateHexImprovement(
+                        existing.id, gameId, col.toLong(), row.toLong(),
+                        newTroops, newWalls, newDevs, currentPlayerId
+                    )
+                } else {
+                    if (wallsToAdd > 1) throw IllegalArgumentException("Too many walls on hex $col,$row")
+                    if (devsToAdd > 2) throw IllegalArgumentException("Too many developments on hex $col,$row")
+
+                    queries.insertOrUpdateHexImprovement(
+                        null, gameId, col.toLong(), row.toLong(),
+                        troopsToAdd.toLong(), wallsToAdd.toLong(), devsToAdd.toLong(), currentPlayerId
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun addIncomeForPlayer(gameId: Long, playerId: Long, round: Long) {
+        val placements = queries.selectGeneralPlacementsForGame(gameId).executeAsList()
+        val improvements = queries.getHexImprovementsForGame(gameId).executeAsList()
+        val hexes = queries.selectAllHexagons().executeAsList()
+
+        val controlledHexes = mutableSetOf<Pair<Int, Int>>()
+
+        placements.forEach { 
+            if (it.playerId == playerId) controlledHexes.add(it.hexCol.toInt() to it.hexRow.toInt())
+        }
+        improvements.forEach {
+            if (it.playerId == playerId && it.troops > 0) controlledHexes.add(it.hexCol.toInt() to it.hexRow.toInt())
+        }
+
+        var validControlledCount = 0
+        controlledHexes.forEach { (col, row) ->
+            val hex = hexes.find { it.col.toInt() == col && it.row.toInt() == row }
+            if (hex != null && (hex.type == "city" || hex.type == "village")) {
+                validControlledCount++
+            }
+        }
+
+        var totalIncome = validControlledCount * 2L
+        if (round == 1L) {
+            totalIncome += 6L
+        }
+
+        queries.updatePlayerBalance(totalIncome, playerId)
+    }
+
     fun nextTurn() {
         val gameId = activeGameId.value ?: return
         val players = queries.selectPlayersForGame(gameId).executeAsList().sortedBy { it.turnOrder }
@@ -550,7 +671,7 @@ class GameManager(
 
         if (players.isEmpty() || gameState == null) return
 
-        val activePhases = listOf(3L, 4L, 5L)
+        val activePhases = listOf(2L, 3L, 4L, 5L)
         val m = players.size
         val currentRound = gameState.currentRound
         val currentPhase = gameState.currentPhase
@@ -567,15 +688,24 @@ class GameManager(
                 val newStartIndex = ((newRound - 1) % m).toInt()
                 queries.updateGameState(newRound, activePhases[0], players[newStartIndex].id, gameId)
                 selectedActiveGeneralPlacementId.value = null
+                if (activePhases[0] == 3L) {
+                    addIncomeForPlayer(gameId, players[newStartIndex].id, newRound)
+                }
             } else {
                 val nextPhase = activePhases[currentPhaseIndex + 1]
                 queries.updateGameState(currentRound, nextPhase, players[startIndex].id, gameId)
                 selectedActiveGeneralPlacementId.value = null
+                if (nextPhase == 3L) {
+                    addIncomeForPlayer(gameId, players[startIndex].id, currentRound)
+                }
             }
         } else {
             val nextIdx = (currIdx + 1) % m
             queries.updateGameState(currentRound, currentPhase, players[nextIdx].id, gameId)
             selectedActiveGeneralPlacementId.value = null
+            if (currentPhase == 3L) {
+                addIncomeForPlayer(gameId, players[nextIdx].id, currentRound)
+            }
         }
     }
 }

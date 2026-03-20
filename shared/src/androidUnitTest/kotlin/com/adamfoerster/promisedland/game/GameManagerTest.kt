@@ -57,7 +57,7 @@ class GameManagerTest {
         val currentPlayer = queries.selectPlayersForGame(gameId).executeAsOne()
         val generalId = queries.selectPlayerHand(gameId, currentPlayer.id).executeAsList().first().id
         assertNull(gameManager.placeGeneral(generalId, 0, 0))
-        queries.updateGameState(2, 1, currentPlayer.id, gameId)
+        queries.updateGameState(2, 5, currentPlayer.id, gameId)
         val placementId = queries.selectGeneralPlacementsForGame(gameId).executeAsOne().id
 
         return Triple(gameId, currentPlayer.id, placementId)
@@ -173,6 +173,7 @@ class GameManagerTest {
         assertEquals("Game #2", gameManager.nextGameName())
     }
 
+
     @Test
     fun testRoundAndPhaseProgression() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -187,17 +188,17 @@ class GameManagerTest {
             
             val state1 = awaitItem()
             assertEquals(1, state1.currentRound)
-            assertEquals(1, state1.currentPhase)
+            assertEquals(2, state1.currentPhase)
             
-            // Player 1 turn -> Player 2 turn (Phase 1)
-            gameManager.nextTurn() 
-            advanceUntilIdle()
-            assertEquals(1, awaitItem().currentPhase)
-            
-            // Player 2 turn -> Player 1 turn (Phase 2)
+            // Player 1 turn -> Player 2 turn (Phase 2)
             gameManager.nextTurn() 
             advanceUntilIdle()
             assertEquals(2, awaitItem().currentPhase)
+            
+            // Player 2 turn -> Player 1 turn (Phase 3)
+            gameManager.nextTurn() 
+            advanceUntilIdle()
+            assertEquals(3, awaitItem().currentPhase)
         }
     }
 

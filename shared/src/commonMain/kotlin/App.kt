@@ -61,6 +61,9 @@ fun App(driverFactory: DatabaseDriverFactory) {
                 },
                 onMoveGeneral = { placementId, hexCol, hexRow ->
                     viewModel.moveGeneral(placementId, hexCol, hexRow)
+                },
+                onPurchaseImprovements = { purchases ->
+                    viewModel.purchaseImprovements(purchases)
                 }
             )
         }

@@ -30,6 +30,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import com.adamfoerster.promisedland.Player
+import com.adamfoerster.promisedland.game.HexImprovementInfo
 import com.adamfoerster.promisedland.game.GeneralPlacementInfo
 import com.adamfoerster.promisedland.game.HexagonData
 import com.adamfoerster.promisedland.ui.playerColors
@@ -54,6 +61,8 @@ fun HexMap(
     onZoomCycleReady: ((() -> Unit) -> Unit)? = null,
     hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
     generalPlacements: List<GeneralPlacementInfo> = emptyList(),
+    hexImprovements: List<HexImprovementInfo> = emptyList(),
+    players: List<Player> = emptyList(),
     reachableHexes: Set<Pair<Int, Int>> = emptySet(),
     scrollToHexTarget: Pair<Int, Int>? = null
 ) {
@@ -74,6 +83,7 @@ fun HexMap(
     val xIcon = rememberVectorPainter(Icons.Default.Clear)
     val villageIcon = rememberVectorPainter(Icons.Default.Home)
     val cityIcon = rememberVectorPainter(Icons.Default.Place)
+    val textMeasurer = rememberTextMeasurer()
 
     val animatedPlacements = generalPlacements.map { p ->
         key(p.id) {
@@ -260,23 +270,35 @@ fun HexMap(
                         val centerY = 1.5f * hexSize * r + hexSize
                         val iconSize = 30f
 
+                        val placementsHere = generalPlacements.filter { it.hexCol == c && it.hexRow == r }
+                        val improvementHere = hexImprovements.find { it.hexCol == c && it.hexRow == r }
+                        val ownerId = placementsHere.firstOrNull()?.playerId
+                            ?: (if (improvementHere != null && improvementHere.troops > 0) improvementHere.playerId else null)
+
+                        val iconColor = if (ownerId != null) {
+                            val pColorStr = players.find { it.id == ownerId }?.color
+                            playerColors.find { it.first == pColorStr }?.second ?: Color.White
+                        } else if (hexData.type == "city") Color.Yellow else Color.White
+
                         if (!hexData.isActive) {
                             translate(centerX - iconSize / 2, centerY - iconSize / 2) {
                                 with(xIcon) {
                                     draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.Red))
                                 }
                             }
-                        } else if (hexData.type == "village") {
+                        } else if (hexData.type == "village" || hexData.type == "city") {
+                            val painter = if (hexData.type == "city") cityIcon else villageIcon
                             translate(centerX - iconSize / 2, centerY - iconSize / 2) {
-                                with(villageIcon) {
-                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.White))
+                                with(painter) {
+                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(iconColor))
                                 }
                             }
-                        } else if (hexData.type == "city") {
-                            translate(centerX - iconSize / 2, centerY - iconSize / 2) {
-                                with(cityIcon) {
-                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(Color.Yellow))
-                                }
+                            
+                            val troops = improvementHere?.troops ?: 0
+                            if (troops > 0) {
+                                val text = troops.toString()
+                                val res = textMeasurer.measure(text, TextStyle(color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp))
+                                drawText(res, topLeft = Offset(centerX - res.size.width / 2f, centerY - res.size.height / 2f))
                             }
                         }
                     }

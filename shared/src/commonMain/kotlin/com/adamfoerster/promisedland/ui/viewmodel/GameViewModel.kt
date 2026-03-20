@@ -60,6 +60,10 @@ class GameViewModel(
         return gameManager.placeGeneral(generalId, hexCol, hexRow)
     }
 
+    fun purchaseImprovements(purchases: List<com.adamfoerster.promisedland.game.PurchaseItem>): String? {
+        return gameManager.purchaseImprovements(purchases)
+    }
+
     fun selectActiveGeneral(placementId: Long?) {
         gameManager.selectActiveGeneral(placementId)
     }

@@ -31,6 +31,7 @@ fun BottomBar(
     state: GameUIState,
     showHandModal: Boolean,
     onShowHandModal: (Boolean) -> Unit,
+    onShowAcquisitionsModal: (Boolean) -> Unit,
     isPlacementPhase: Boolean,
     needsPlacement: Boolean,
     placementError: String,
@@ -133,7 +134,7 @@ fun BottomBar(
                     )
                 }
 
-                if (state.currentRound > 1L && state.idleGenerals.isNotEmpty()) {
+                if (state.currentPhase == 5L && state.idleGenerals.isNotEmpty()) {
                     Button(
                         onClick = {
                             val nextIdle = state.idleGenerals.first()
@@ -166,13 +167,18 @@ fun BottomBar(
                     )
                 }
 
+                val improvementOnSelectedHex = if (selectedHex != null) {
+                    state.hexImprovements.find { it.hexCol == selectedHex.col && it.hexRow == selectedHex.row }
+                } else null
+
                 HexInfoSection(
                     selectedHex = selectedHex,
                     placementsOnSelectedHex = placementsOnSelectedHex,
+                    improvement = improvementOnSelectedHex,
                     activeGeneralForMove = activeGeneralForMove
                 )
 
-                if (state.currentRound > 1L) {
+                if (state.currentPhase == 5L) {
                     if (currentPlayerPlacementsOnSelectedHex.isNotEmpty()) {
                         Row(
                             modifier = Modifier
@@ -232,22 +238,44 @@ fun BottomBar(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Button(
-                onClick = { onShowEndTurnConfirm(true) },
-                enabled = !needsPlacement,
-                modifier = Modifier.height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = if (needsPlacement) Color.Gray else Color(0xFFD32F2F),
-                    contentColor = Color.White,
-                    disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
-                    disabledContentColor = Color.White.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(14.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                Text(
-                    text = if (needsPlacement) "Place\nGenerals" else "Next Turn",
-                    style = MaterialTheme.typography.button
-                )
+                if (state.currentPhase == 4L) {
+                    Button(
+                        onClick = { onShowAcquisitionsModal(true) },
+                        modifier = Modifier.height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = Color(0xFF1976D2),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(
+                            text = "Shop",
+                            style = MaterialTheme.typography.button
+                        )
+                    }
+                }
+                
+                Button(
+                    onClick = { onShowEndTurnConfirm(true) },
+                    enabled = !needsPlacement,
+                    modifier = Modifier.height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = if (needsPlacement) Color.Gray else Color(0xFFD32F2F),
+                        contentColor = Color.White,
+                        disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
+                        disabledContentColor = Color.White.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        text = if (needsPlacement) "Place\nGenerals" else "Next Turn",
+                        style = MaterialTheme.typography.button
+                    )
+                }
             }
         }
     }
