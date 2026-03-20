@@ -1,28 +1,19 @@
 package com.adamfoerster.promisedland.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -31,9 +22,6 @@ import com.adamfoerster.promisedland.game.GameUIState
 import com.adamfoerster.promisedland.game.GeneralData
 import com.adamfoerster.promisedland.game.GeneralPlacementInfo
 import com.adamfoerster.promisedland.game.HexagonData
-
-private val HudBarColor = Color(0xFF151515)
-private val HudPanelColor = Color(0xFF242424)
 
 @Composable
 fun GameScreen(
@@ -62,11 +50,12 @@ fun GameScreen(
     var selectedGeneralFromHand by remember { mutableStateOf<GeneralData?>(null) }
     var placementError by remember { mutableStateOf("") }
     var pendingMovePlacementId by remember { mutableStateOf<Long?>(null) }
+    var scrollToHexTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    var zoomCycleCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val isPlacementPhase = state.currentPhase == 1L
     val needsPlacement = isPlacementPhase && state.currentPlayerGeneralCount < 2
-
-    val moveSelectionScroll = rememberScrollState()
 
     val placementsOnSelectedHex = if (selectedHex != null) {
         state.generalPlacements.filter { it.hexCol == selectedHex?.col && it.hexRow == selectedHex?.row }
@@ -77,10 +66,14 @@ fun GameScreen(
     val activeGeneralForMove = state.selectedActiveGeneralForMove
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Hex Map as background (fills entire screen)
         HexMap(
             hexagons = state.hexagons,
             selectedHex = selectedHex,
             generalPlacements = state.generalPlacements,
+            reachableHexes = state.reachableHexes,
+            scrollToHexTarget = scrollToHexTarget,
+            onZoomCycleReady = { callback -> zoomCycleCallback = callback },
             onHexSelected = { hex ->
                 if (selectedGeneralFromHand != null) {
                     val error = onPlaceGeneral(selectedGeneralFromHand!!.id, hex.col, hex.row)
@@ -93,6 +86,7 @@ fun GameScreen(
                 } else if (activeGeneralForMove != null) {
                     val error = onMoveGeneral(activeGeneralForMove.id, hex.col, hex.row)
                     if (error == null) {
+                        selectedHex = hex
                         onSelectActiveGeneral(null)
                         pendingMovePlacementId = null
                         placementError = ""
@@ -107,183 +101,32 @@ fun GameScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = HudBarColor,
-            elevation = 12.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.widthIn(min = 84.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showHandModal = true },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            backgroundColor = HudPanelColor,
-                            contentColor = Color.White
-                        ),
-                        border = ButtonDefaults.outlinedBorder.copy(width = 1.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.White.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "✋",
-                                color = Color.White,
-                                style = MaterialTheme.typography.caption,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            state.playerHand.size.toString(),
-                            style = MaterialTheme.typography.button
-                        )
-                    }
+        // Top Bar (always on top)
+        TopBar(state = state, onReturnToWelcome = onReturnToWelcome, onZoomCycle = zoomCycleCallback)
 
-                    if (state.currentRound > 1L && state.idleGenerals.isNotEmpty()) {
-                        Button(
-                            onClick = {
-                                val nextIdle = state.idleGenerals.first()
-                                selectedHex = state.hexagons[nextIdle.hexCol to nextIdle.hexRow]
-                                pendingMovePlacementId = nextIdle.id
-                                onSelectActiveGeneral(nextIdle.id)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                backgroundColor = Color(0xFF1976D2),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-                        ) {
-                            Text("Idle", style = MaterialTheme.typography.button)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (isPlacementPhase) {
-                        Text(
-                            text = "Place your two generals in villages.",
-                            color = Color(0xFFFF80AB),
-                            style = MaterialTheme.typography.body2,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    if (placementError.isNotEmpty()) {
-                        Text(
-                            text = placementError,
-                            color = Color(0xFFFF6E6E),
-                            style = MaterialTheme.typography.body2
-                        )
-                    }
-
-                    HexInfoSection(
-                        selectedHex = selectedHex,
-                        placementsOnSelectedHex = placementsOnSelectedHex,
-                        activeGeneralForMove = activeGeneralForMove
-                    )
-
-                    if (state.currentRound > 1L) {
-                        if (currentPlayerPlacementsOnSelectedHex.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(moveSelectionScroll),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                currentPlayerPlacementsOnSelectedHex.forEach { placement ->
-                                    val hasMoved = placement.lastMovedRound >= state.currentRound
-                                    val isSelectedForMove = activeGeneralForMove?.id == placement.id
-                                    Button(
-                                        onClick = {
-                                            if (!hasMoved) {
-                                                val newSelection =
-                                                    if (isSelectedForMove) null else placement.id
-                                                pendingMovePlacementId = newSelection
-                                                onSelectActiveGeneral(newSelection)
-                                            }
-                                        },
-                                        enabled = !hasMoved,
-                                        colors = ButtonDefaults.buttonColors(
-                                            backgroundColor =
-                                                if (isSelectedForMove) Color(0xFF2E7D32) else Color(
-                                                    0xFF6A1B9A
-                                                ),
-                                            contentColor = Color.White,
-                                            disabledBackgroundColor = Color.Gray.copy(alpha = 0.45f),
-                                            disabledContentColor = Color.White.copy(alpha = 0.6f)
-                                        ),
-                                        shape = RoundedCornerShape(16.dp),
-                                        contentPadding = PaddingValues(
-                                            horizontal = 12.dp,
-                                            vertical = 8.dp
-                                        )
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Place,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = placement.generalName + if (hasMoved) " moved" else "",
-                                            style = MaterialTheme.typography.caption
-                                        )
-                                    }
-                                }
-                            }
-                        } else if (selectedHex == null) {
-                            Text(
-                                text = "Select a hex to inspect it or choose a general to move.",
-                                color = Color.LightGray,
-                                style = MaterialTheme.typography.caption
-                            )
-                        }
-                    }
-                }
-
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Button(
-                    onClick = { showEndTurnConfirm = true },
-                    enabled = !needsPlacement,
-                    modifier = Modifier.height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = if (needsPlacement) Color.Gray else Color(0xFFD32F2F),
-                        contentColor = Color.White,
-                        disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
-                        disabledContentColor = Color.White.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text(
-                        text = if (needsPlacement) "Place\nGenerals" else "Next Turn",
-                        style = MaterialTheme.typography.button
-                    )
-                }
-            }
+        // Bottom Bar (always on top)
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            BottomBar(
+                state = state,
+                showHandModal = showHandModal,
+                onShowHandModal = { showHandModal = it },
+                isPlacementPhase = isPlacementPhase,
+                needsPlacement = needsPlacement,
+                placementError = placementError,
+                selectedHex = selectedHex,
+                placementsOnSelectedHex = placementsOnSelectedHex,
+                activeGeneralForMove = activeGeneralForMove,
+                currentPlayerPlacementsOnSelectedHex = currentPlayerPlacementsOnSelectedHex,
+                onSelectActiveGeneral = onSelectActiveGeneral,
+                onIdleClicked = { hexCol, hexRow, placementId ->
+                    selectedHex = state.hexagons[hexCol to hexRow]
+                    scrollToHexTarget = hexCol to hexRow
+                    pendingMovePlacementId = placementId
+                    onSelectActiveGeneral(placementId)
+                },
+                onMoveGeneral = onMoveGeneral,
+                onShowEndTurnConfirm = { showEndTurnConfirm = it }
+            )
         }
     }
 
@@ -426,7 +269,7 @@ fun GameScreen(
 }
 
 @Composable
-private fun HexInfoSection(
+fun HexInfoSection(
     selectedHex: HexagonData?,
     placementsOnSelectedHex: List<GeneralPlacementInfo>,
     activeGeneralForMove: GeneralPlacementInfo?

@@ -54,7 +54,8 @@ fun HexMap(
     onZoomCycleReady: ((() -> Unit) -> Unit)? = null,
     hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
     generalPlacements: List<GeneralPlacementInfo> = emptyList(),
-    reachableHexes: Set<Pair<Int, Int>> = emptySet()
+    reachableHexes: Set<Pair<Int, Int>> = emptySet(),
+    scrollToHexTarget: Pair<Int, Int>? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     val currentOnHexSelected by rememberUpdatedState(onHexSelected)
@@ -111,6 +112,23 @@ fun HexMap(
             currentZoomPreset = ZoomPreset.OUT
             launch { scale.animateTo(fitScale, tween(350)) }
             launch { offset.animateTo(Offset(offsetX, offsetY), tween(350)) }
+        }
+    }
+
+    LaunchedEffect(scrollToHexTarget) {
+        if (scrollToHexTarget != null && containerSize.width > 0 && containerSize.height > 0) {
+            val targetHex = hexagons[scrollToHexTarget]
+            if (targetHex != null) {
+                val hexX = sqrt(3f) * hexSize * (targetHex.col + 0.5f * (targetHex.row % 2)) + (sqrt(3f) * hexSize / 2f)
+                val hexY = 1.5f * hexSize * targetHex.row + hexSize
+                val centerX = containerSize.width / 2f
+                val centerY = containerSize.height / 2f
+                val targetScale = ZoomPreset.IN.scale
+                val targetOffset = Offset(centerX - hexX * targetScale, centerY - hexY * targetScale)
+                launch { scale.animateTo(targetScale, tween(500)) }
+                launch { offset.animateTo(targetOffset, tween(500)) }
+                currentZoomPreset = ZoomPreset.IN
+            }
         }
     }
 
