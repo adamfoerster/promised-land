@@ -8,5 +8,8 @@ data class HexagonData(
     val type: String? = null,
     val terrain: String? = null
 ) {
-    val id: String = name.ifBlank { "${('A'.code + col).toChar()}${row + 1}" }
+    val id: String = if(name.isNotBlank())
+        "$name ${('A'.code + col).toChar()}${row + 1}"
+    else
+        "${('A'.code + col).toChar()}${row + 1}"
 }

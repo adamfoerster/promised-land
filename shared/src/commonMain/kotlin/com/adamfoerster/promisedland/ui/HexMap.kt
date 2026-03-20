@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +28,6 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.adamfoerster.promisedland.game.GeneralPlacementInfo
@@ -53,6 +51,7 @@ fun HexMap(
     turnKey: String = "",
     onHexSelected: (HexagonData) -> Unit,
     selectedHex: HexagonData?,
+    onZoomCycleReady: ((() -> Unit) -> Unit)? = null,
     hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
     generalPlacements: List<GeneralPlacementInfo> = emptyList(),
     reachableHexes: Set<Pair<Int, Int>> = emptySet()
@@ -149,6 +148,10 @@ fun HexMap(
                 launch { scale.animateTo(targetScale, tween(500)) }
             }
         }
+    }
+
+    LaunchedEffect(onZoomCycleReady) {
+        onZoomCycleReady?.invoke(::cycleZoom)
     }
 
     Box(
@@ -292,40 +295,6 @@ fun HexMap(
             }
         }
 
-        FloatingActionButton(
-            onClick = { cycleZoom() },
-            modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 136.dp, start = 16.dp),
-            backgroundColor = Color.Black.copy(alpha = 0.6f),
-            contentColor = Color.White
-        ) {
-            Icon(Icons.Default.Search, contentDescription = "Zoom Cycle")
-        }
-
-        if (selectedHex != null) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 120.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = Color.Black.copy(alpha = 0.8f),
-                elevation = 8.dp
-            ) {
-                val typeText = when(selectedHex.type) {
-                    "village" -> " (Village)"
-                    "city" -> " (City)"
-                    else -> ""
-                }
-                val terrainText = selectedHex.terrain?.let { " - ${it.replaceFirstChar { char -> char.uppercase() }}" } ?: ""
-                Text(
-                    text = "Selected: ${selectedHex.id}$typeText$terrainText",
-                    modifier = Modifier.padding(16.dp),
-                    color = Color.White,
-                    style = MaterialTheme.typography.h6,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
     }
 }
 
