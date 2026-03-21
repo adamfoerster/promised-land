@@ -95,189 +95,183 @@ fun BottomBar(
 
             // Main content row
             Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.widthIn(min = 84.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedButton(
-                    onClick = { onShowHandModal(true) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        backgroundColor = HudPanelColor,
-                        contentColor = Color.White
-                    ),
-                    border = ButtonDefaults.outlinedBorder.copy(width = 1.dp)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.16f)),
-                        contentAlignment = Alignment.Center
+                    Button(
+                        onClick = { onShowAcquisitionsModal(true) },
+                        enabled = state.currentPhase == 4L,
+                        modifier = Modifier.height(40.dp).fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = if (state.currentPhase == 4L) Color(0xFF1976D2) else Color.Gray.copy(
+                                alpha = 0.5f
+                            ),
+                            contentColor = Color.White,
+                            disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
+                            disabledContentColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "✋",
+                            text = "🛒$${state.currentPlayer?.balance ?: 0}",
+                            style = MaterialTheme.typography.button
+                        )
+                    }
+
+                    Button(
+                        onClick = { onShowHandModal(true) },
+                        modifier = Modifier.height(40.dp).fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = Color(0xFF1976D2),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "✋ ${state.playerHand.size}",
                             color = Color.White,
                             style = MaterialTheme.typography.caption,
                             textAlign = TextAlign.Center
                         )
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        state.playerHand.size.toString(),
-                        style = MaterialTheme.typography.button
-                    )
-                }
 
-                if (state.currentPhase == 5L && state.idleGenerals.isNotEmpty()) {
-                    Button(
-                        onClick = {
-                            val nextIdle = state.idleGenerals.first()
-                            onIdleClicked(nextIdle.hexCol, nextIdle.hexRow, nextIdle.id)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            backgroundColor = Color(0xFF1976D2),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Text("Idle", style = MaterialTheme.typography.button)
+                    if (state.currentPhase == 5L && state.idleGenerals.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                val nextIdle = state.idleGenerals.first()
+                                onIdleClicked(nextIdle.hexCol, nextIdle.hexRow, nextIdle.id)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(0xFF1976D2),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.height(40.dp).fillMaxWidth(),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "\uD83D\uDD14 Idle",
+                                color = Color.White,
+                                style = MaterialTheme.typography.caption,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (placementError.isNotEmpty()) {
-                    Text(
-                        text = placementError,
-                        color = Color(0xFFFF6E6E),
-                        style = MaterialTheme.typography.body2
-                    )
-                }
-
-                val improvementOnSelectedHex = if (selectedHex != null) {
-                    state.hexImprovements.find { it.hexCol == selectedHex.col && it.hexRow == selectedHex.row }
-                } else null
-
-                HexInfoSection(
-                    selectedHex = selectedHex,
-                    placementsOnSelectedHex = placementsOnSelectedHex,
-                    improvement = improvementOnSelectedHex,
-                    activeGeneralForMove = activeGeneralForMove
-                )
-
-                if (state.currentPhase == 5L) {
-                    if (currentPlayerPlacementsOnSelectedHex.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(moveSelectionScroll),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            currentPlayerPlacementsOnSelectedHex.forEach { placement ->
-                                val hasMoved = placement.lastMovedRound >= state.currentRound
-                                val isSelectedForMove = activeGeneralForMove?.id == placement.id
-                                Button(
-                                    onClick = {
-                                        if (!hasMoved) {
-                                            val newSelection =
-                                                if (isSelectedForMove) null else placement.id
-                                            onSelectActiveGeneral(newSelection)
-                                        }
-                                    },
-                                    enabled = !hasMoved,
-                                    colors = ButtonDefaults.buttonColors(
-                                        backgroundColor =
-                                            if (isSelectedForMove) Color(0xFF2E7D32) else Color(
-                                                0xFF6A1B9A
-                                            ),
-                                        contentColor = Color.White,
-                                        disabledBackgroundColor = Color.Gray.copy(alpha = 0.45f),
-                                        disabledContentColor = Color.White.copy(alpha = 0.6f)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.Default.Place,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = placement.generalName + if (hasMoved) " moved" else "",
-                                        style = MaterialTheme.typography.caption
-                                    )
-                                }
-                            }
-                        }
-                    } else if (selectedHex == null) {
+                Column(
+                    modifier = Modifier
+                        .weight(2f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (placementError.isNotEmpty()) {
                         Text(
-                            text = "Select a hex to inspect it or choose a general to move.",
-                            color = Color.LightGray,
-                            style = MaterialTheme.typography.caption
+                            text = placementError,
+                            color = Color(0xFFFF6E6E),
+                            style = MaterialTheme.typography.body2
                         )
                     }
+
+                    val improvementOnSelectedHex = if (selectedHex != null) {
+                        state.hexImprovements.find { it.hexCol == selectedHex.col && it.hexRow == selectedHex.row }
+                    } else null
+
+                    HexInfoSection(
+                        selectedHex = selectedHex,
+                        placementsOnSelectedHex = placementsOnSelectedHex,
+                        improvement = improvementOnSelectedHex,
+                        activeGeneralForMove = activeGeneralForMove
+                    )
+
+                    if (state.currentPhase == 5L) {
+                        if (currentPlayerPlacementsOnSelectedHex.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(moveSelectionScroll),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                currentPlayerPlacementsOnSelectedHex.forEach { placement ->
+                                    val hasMoved = placement.lastMovedRound >= state.currentRound
+                                    val isSelectedForMove = activeGeneralForMove?.id == placement.id
+                                    Button(
+                                        onClick = {
+                                            if (!hasMoved) {
+                                                val newSelection =
+                                                    if (isSelectedForMove) null else placement.id
+                                                onSelectActiveGeneral(newSelection)
+                                            }
+                                        },
+                                        enabled = !hasMoved,
+                                        colors = ButtonDefaults.buttonColors(
+                                            backgroundColor =
+                                                if (isSelectedForMove) Color(0xFF2E7D32) else Color(
+                                                    0xFF6A1B9A
+                                                ),
+                                            contentColor = Color.White,
+                                            disabledBackgroundColor = Color.Gray.copy(alpha = 0.45f),
+                                            disabledContentColor = Color.White.copy(alpha = 0.6f)
+                                        ),
+                                        shape = RoundedCornerShape(16.dp),
+                                        contentPadding = PaddingValues(
+                                            horizontal = 12.dp,
+                                            vertical = 8.dp
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Place,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = placement.generalName + if (hasMoved) " moved" else "",
+                                            style = MaterialTheme.typography.caption
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (selectedHex == null) {
+                            Text(
+                                text = "Select a hex to inspect it or choose a general to move.",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.caption
+                            )
+                        }
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                if (state.currentPhase == 4L) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier
+                        .weight(1f),
+                ) {
                     Button(
-                        onClick = { onShowAcquisitionsModal(true) },
-                        modifier = Modifier.height(48.dp),
+                        onClick = { onShowEndTurnConfirm(true) },
+                        enabled = !needsPlacement,
+                        modifier = Modifier.height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            backgroundColor = Color(0xFF1976D2),
-                            contentColor = Color.White
+                            backgroundColor = if (needsPlacement) Color.Gray else Color(0xFFD32F2F),
+                            contentColor = Color.White,
+                            disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
+                            disabledContentColor = Color.White.copy(alpha = 0.5f)
                         ),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "Shop",
+                            text = if (needsPlacement) "Place\nGenerals" else "Next Turn",
                             style = MaterialTheme.typography.button
                         )
                     }
                 }
-                
-                Button(
-                    onClick = { onShowEndTurnConfirm(true) },
-                    enabled = !needsPlacement,
-                    modifier = Modifier.height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = if (needsPlacement) Color.Gray else Color(0xFFD32F2F),
-                        contentColor = Color.White,
-                        disabledBackgroundColor = Color.Gray.copy(alpha = 0.5f),
-                        disabledContentColor = Color.White.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text(
-                        text = if (needsPlacement) "Place\nGenerals" else "Next Turn",
-                        style = MaterialTheme.typography.button
-                    )
-                }
             }
         }
     }
-}
 }

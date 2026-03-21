@@ -18,13 +18,13 @@ import androidx.compose.ui.unit.dp
 
 val playerColors = listOf(
     "Red" to Color.Red,
-    "Blue" to Color.Blue,
-    "Green" to Color.Green,
-    "Yellow" to Color.Yellow,
-    "Orange" to Color(0xFFFFA500),
-    "Purple" to Color(0xFF800080),
-    "Black" to Color.Black,
-    "White" to Color.White
+    "Blue" to Color(0xFF39aee1),
+    "Green" to Color(0xFF1AA35A),
+    "Yellow" to Color(0xFFA5A752),
+    "Orange" to Color(0xFFA95B28),
+    "Purple" to Color(0xFF602CAA),
+    "Teal" to Color(0xFF539890),
+    "Pink" to Color(0xFF985397)
 )
 
 @Composable

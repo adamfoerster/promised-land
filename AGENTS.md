@@ -31,7 +31,6 @@ promised-land/
 │
 ├── shared/                       # KMP shared module (UI + logic + DB)
 │   ├── build.gradle.kts          # Multiplatform plugin config + SQLDelight
-│   ├── map_background.png        # Map background asset (root copy)
 │   └── src/
 │       ├── commonMain/
 │       │   ├── kotlin/
@@ -51,7 +50,6 @@ promised-land/
 │       │   │           └── HexMap.kt                          # Hex grid rendering, pan/zoom, tap
 │       │   ├── resources/
 │       │   │   ├── hexagons.csv                               # Map tile definitions (CSV)
-│       │   │   └── map_background.png                         # Background image for the hex map
 │       │   └── sqldelight/
 │       │       └── com/adamfoerster/promisedland/
 │       │           └── GameDatabase.sq                        # Schema & queries (Game, Player, GameState, Hexagon, Metadata)

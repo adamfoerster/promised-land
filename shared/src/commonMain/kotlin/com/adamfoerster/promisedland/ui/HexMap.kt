@@ -5,18 +5,18 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.runtime.key
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -56,9 +56,9 @@ enum class ZoomPreset(val scale: Float) {
 fun HexMap(
     modifier: Modifier = Modifier,
     turnKey: String = "",
-    onHexSelected: (HexagonData) -> Unit,
+    onHexSelected: (HexagonData?) -> Unit,
     selectedHex: HexagonData?,
-    onZoomCycleReady: ((() -> Unit) -> Unit)? = null,
+    onZoomCycleReady: ((cycle: () -> Unit, reset: () -> Unit) -> Unit)? = null,
     hexagons: Map<Pair<Int, Int>, HexagonData> = emptyMap(),
     generalPlacements: List<GeneralPlacementInfo> = emptyList(),
     hexImprovements: List<HexImprovementInfo> = emptyList(),
@@ -111,17 +111,22 @@ fun HexMap(
         }
     }
 
-    LaunchedEffect(turnKey, containerSize) {
-        if (turnKey.isNotEmpty() && containerSize.width > 0 && containerSize.height > 0) {
-            val fitScale = minOf(
-                containerSize.width.toFloat() / mapWidth,
-                containerSize.height.toFloat() / mapHeight
-            )
+    fun resetZoomToFit() {
+        if (containerSize.width > 0 && containerSize.height > 0) {
+            val fitScale = minOf(containerSize.width.toFloat() / mapWidth, containerSize.height.toFloat() / mapHeight)
             val offsetX = (containerSize.width - mapWidth * fitScale) / 2f
             val offsetY = (containerSize.height - mapHeight * fitScale) / 2f
             currentZoomPreset = ZoomPreset.OUT
-            launch { scale.animateTo(fitScale, tween(350)) }
-            launch { offset.animateTo(Offset(offsetX, offsetY), tween(350)) }
+            coroutineScope.launch {
+                launch { scale.animateTo(fitScale, tween(500)) }
+                launch { offset.animateTo(Offset(offsetX, offsetY), tween(500)) }
+            }
+        }
+    }
+
+    LaunchedEffect(turnKey) {
+        if (turnKey.isNotEmpty()) {
+            resetZoomToFit()
         }
     }
 
@@ -179,7 +184,7 @@ fun HexMap(
     }
 
     LaunchedEffect(onZoomCycleReady) {
-        onZoomCycleReady?.invoke(::cycleZoom)
+        onZoomCycleReady?.invoke(::cycleZoom, ::resetZoomToFit)
     }
 
     Box(
@@ -198,7 +203,11 @@ fun HexMap(
                             currentOnHexSelected(hexData)
                             animateToHex(hexData, ZoomPreset.IN.scale)
                             currentZoomPreset = ZoomPreset.IN
+                        } else {
+                            currentOnHexSelected(null)
                         }
+                    } else {
+                        currentOnHexSelected(null)
                     }
                 }
             }
@@ -268,7 +277,7 @@ fun HexMap(
                         // Draw Icons
                         val centerX = sqrt(3f) * hexSize * (c + 0.5f * (r % 2)) + (sqrt(3f) * hexSize / 2f)
                         val centerY = 1.5f * hexSize * r + hexSize
-                        val iconSize = 30f
+                        val iconSize = 45f
 
                         val placementsHere = generalPlacements.filter { it.hexCol == c && it.hexRow == r }
                         val improvementHere = hexImprovements.find { it.hexCol == c && it.hexRow == r }
@@ -287,17 +296,63 @@ fun HexMap(
                                 }
                             }
                         } else if (hexData.type == "village" || hexData.type == "city") {
-                            val painter = if (hexData.type == "city") cityIcon else villageIcon
-                            translate(centerX - iconSize / 2, centerY - iconSize / 2) {
-                                with(painter) {
-                                    draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(iconColor))
+                            val hasWall = improvementHere?.walls ?: 0 > 0
+                            
+                            if (hasWall && hexData.type == "village") {
+                                // Draw a custom Tower (Rook) shape
+                                val towerWidth = iconSize * 0.8f
+                                val towerHeight = iconSize * 0.9f
+                                val tx = centerX - towerWidth / 2f
+                                val ty = centerY - towerHeight / 2f
+                                
+                                val towerPath = Path().apply {
+                                    // Base
+                                    moveTo(tx, ty + towerHeight)
+                                    lineTo(tx + towerWidth, ty + towerHeight)
+                                    lineTo(tx + towerWidth * 0.9f, ty + towerHeight * 0.85f)
+                                    lineTo(tx + towerWidth * 0.1f, ty + towerHeight * 0.85f)
+                                    close()
+                                    
+                                    // Column
+                                    moveTo(tx + towerWidth * 0.2f, ty + towerHeight * 0.85f)
+                                    lineTo(tx + towerWidth * 0.8f, ty + towerHeight * 0.85f)
+                                    lineTo(tx + towerWidth * 0.75f, ty + towerHeight * 0.3f)
+                                    lineTo(tx + towerWidth * 0.25f, ty + towerHeight * 0.3f)
+                                    close()
+                                    
+                                    // Top Battlements
+                                    moveTo(tx + towerWidth * 0.15f, ty + towerHeight * 0.3f)
+                                    lineTo(tx + towerWidth * 0.85f, ty + towerHeight * 0.3f)
+                                    lineTo(tx + towerWidth * 0.85f, ty)
+                                    
+                                    // Notches
+                                    lineTo(tx + towerWidth * 0.7f, ty)
+                                    lineTo(tx + towerWidth * 0.7f, ty + towerHeight * 0.1f)
+                                    lineTo(tx + towerWidth * 0.6f, ty + towerHeight * 0.1f)
+                                    lineTo(tx + towerWidth * 0.6f, ty)
+                                    
+                                    lineTo(tx + towerWidth * 0.4f, ty)
+                                    lineTo(tx + towerWidth * 0.4f, ty + towerHeight * 0.1f)
+                                    lineTo(tx + towerWidth * 0.3f, ty + towerHeight * 0.1f)
+                                    lineTo(tx + towerWidth * 0.3f, ty)
+                                    
+                                    lineTo(tx + towerWidth * 0.15f, ty)
+                                    close()
+                                }
+                                drawPath(path = towerPath, color = iconColor, style = Fill)
+                            } else {
+                                val painter = if (hexData.type == "city") cityIcon else villageIcon
+                                translate(centerX - iconSize / 2, centerY - iconSize / 2) {
+                                    with(painter) {
+                                        draw(size = Size(iconSize, iconSize), colorFilter = ColorFilter.tint(iconColor))
+                                    }
                                 }
                             }
                             
                             val troops = improvementHere?.troops ?: 0
                             if (troops > 0) {
                                 val text = troops.toString()
-                                val res = textMeasurer.measure(text, TextStyle(color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp))
+                                val res = textMeasurer.measure(text, TextStyle(color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp))
                                 drawText(res, topLeft = Offset(centerX - res.size.width / 2f, centerY - res.size.height / 2f))
                             }
                         }
@@ -311,7 +366,7 @@ fun HexMap(
                     val idx = targetGroup.indexOfFirst { it.first.id == placement.id }.coerceAtLeast(0)
                     
                     val generalIconSize = 20f
-                    val iconSize = 30f // From inner loop
+                    val iconSize = 45f // From inner loop
                     val playerColor = playerColors.find { it.first == placement.playerColor }?.second ?: Color.White
                     
                     val offsetX = if (idx == 0) -generalIconSize * 0.6f else generalIconSize * 0.6f

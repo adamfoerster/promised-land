@@ -51,6 +51,9 @@ fun GameScreen(
     var scrollToHexTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     var zoomCycleCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var zoomResetCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
+    
+    val turnKey = "${state.currentPlayer.id}_${state.currentRound}_${state.currentPhase}"
 
     val isPlacementPhase = state.currentPhase == 2L
     val needsPlacement = isPlacementPhase && state.currentPlayerGeneralCount < 2
@@ -63,40 +66,62 @@ fun GameScreen(
 
     val activeGeneralForMove = state.selectedActiveGeneralForMove
 
+    LaunchedEffect(turnKey) {
+        selectedHex = null
+        zoomResetCallback?.invoke()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Hex Map as background (fills entire screen)
         HexMap(
             hexagons = state.hexagons,
             selectedHex = selectedHex,
+            turnKey = turnKey,
             generalPlacements = state.generalPlacements,
             hexImprovements = state.hexImprovements,
             players = state.players,
             reachableHexes = state.reachableHexes,
             scrollToHexTarget = scrollToHexTarget,
-            onZoomCycleReady = { callback -> zoomCycleCallback = callback },
+            onZoomCycleReady = { cycle, reset -> 
+                zoomCycleCallback = cycle
+                zoomResetCallback = reset
+            },
             onHexSelected = { hex ->
                 if (selectedGeneralFromHand != null) {
-                    val error = onPlaceGeneral(selectedGeneralFromHand!!.id, hex.col, hex.row)
-                    if (error == null) {
-                        selectedGeneralFromHand = null
-                        selectedHex = hex
-                        placementError = ""
+                    if (hex != null) {
+                        val error = onPlaceGeneral(selectedGeneralFromHand!!.id, hex.col, hex.row)
+                        if (error == null) {
+                            selectedGeneralFromHand = null
+                            selectedHex = hex
+                            placementError = ""
+                        } else {
+                            placementError = error
+                        }
                     } else {
-                        placementError = error
+                        selectedGeneralFromHand = null
+                        placementError = ""
                     }
                 } else if (activeGeneralForMove != null) {
-                    val error = onMoveGeneral(activeGeneralForMove.id, hex.col, hex.row)
-                    if (error == null) {
-                        selectedHex = hex
+                    if (hex != null) {
+                        val error = onMoveGeneral(activeGeneralForMove.id, hex.col, hex.row)
+                        if (error == null) {
+                            selectedHex = hex
+                            onSelectActiveGeneral(null)
+                            pendingMovePlacementId = null
+                            placementError = ""
+                        } else {
+                            placementError = error
+                        }
+                    } else {
                         onSelectActiveGeneral(null)
                         pendingMovePlacementId = null
-                        placementError = ""
-                    } else {
-                        placementError = error
                     }
                 } else {
-                    selectedHex = if (selectedHex?.id == hex.id) null else hex
+                    selectedHex = if (selectedHex?.id == hex?.id) null else hex
                     placementError = ""
+                    if (selectedHex == null) {
+                        zoomResetCallback?.invoke()
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -171,6 +196,7 @@ fun GameScreen(
                 TextButton(
                     onClick = {
                         showEndTurnConfirm = false
+                        selectedHex = null
                         onNextTurn()
                     }
                 ) {
